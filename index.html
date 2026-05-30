@@ -1,0 +1,1216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>🍦 Ninja Creami Lab</title>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #0F0C29; }
+    select option { background: #1a1730; color: #fff; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useCallback, useEffect, useRef } = React;
+
+    // ── localStorage polyfill ──────────────────────────────────────────────
+    window.storage = {
+      get:    async (key)       => { const v=localStorage.getItem(key); return v?{key,value:v}:null; },
+      set:    async (key,value) => { localStorage.setItem(key,value);   return {key,value}; },
+      delete: async (key)       => { localStorage.removeItem(key);      return {key,deleted:true}; },
+    };
+
+
+
+const CONTAINER_MAX_ML = 470;
+
+const INGREDIENTS_DEFAULT = {
+  "🥛 Base": [
+    { id:"lm",  name:"Regular Milk",          pct:"1.5%",        cal:0.45, fat:0.015, carbs:0.048, sugar:0.048, protein:0.034, unit:"g", density:1.03, defaultQty:340, min:100, max:800, step:10,  costPerG:0.0009 },
+    { id:"am",  name:"Almond Milk",            pct:"unsweetened", cal:0.13, fat:0.011, carbs:0.006, sugar:0,     protein:0.006, unit:"g", density:1.01, defaultQty:340, min:100, max:800, step:10,  costPerG:0.0015 },
+    { id:"oy",  name:"Oat Milk",               pct:"barista",     cal:0.45, fat:0.015, carbs:0.068, sugar:0.04,  protein:0.013, unit:"g", density:1.03, defaultQty:340, min:100, max:800, step:10,  costPerG:0.0017 },
+    { id:"cm",  name:"Coconut Milk",           pct:"full fat",    cal:1.97, fat:0.21,  carbs:0.06,  sugar:0.03,  protein:0.02,  unit:"g", density:0.96, defaultQty:120, min:50,  max:800, step:10,  costPerG:0.003  },
+    { id:"gy",  name:"Greek Yogurt",           pct:"2%",          cal:0.73, fat:0.02,  carbs:0.04,  sugar:0.032, protein:0.10,  unit:"g", density:1.05, defaultQty:150, min:50,  max:800, step:10,  costPerG:0.0028 },
+    { id:"cf",  name:"Cottage Cheese",         pct:"low fat",     cal:0.72, fat:0.01,  carbs:0.03,  sugar:0.027, protein:0.12,  unit:"g", density:1.04, defaultQty:150, min:50,  max:800, step:10,  costPerG:0.0025 },
+  ],
+  "🍬 Sweeteners": [
+    { id:"er",  name:"Erythritol",  pct:null, cal:0.2,  fat:0, carbs:1.0,  sugar:0,    protein:0,    unit:"g", density:1.45, defaultQty:20, min:5,   max:800, step:5,   costPerG:0.006 },
+    { id:"stv", name:"Stevia",      pct:null, cal:0,    fat:0, carbs:0,    sugar:0,    protein:0,    unit:"g", density:0.5,  defaultQty:1,  min:0.5, max:800, step:0.5, costPerG:0.05  },
+    { id:"sg",  name:"Sugar",       pct:null, cal:3.87, fat:0, carbs:1.0,  sugar:1.0,  protein:0,    unit:"g", density:0.85, defaultQty:20, min:5,   max:800, step:5,   costPerG:0.001 },
+    { id:"hn",  name:"Honey",       pct:null, cal:3.04, fat:0, carbs:0.82, sugar:0.82, protein:0.003,unit:"g", density:1.42, defaultQty:15, min:5,   max:800, step:5,   costPerG:0.006 },
+  ],
+  "🍫 Flavors": [
+    { id:"vp", name:"Vanilla Pudding Powder", pct:"instant", cal:3.70, fat:0,    carbs:0.93, sugar:0,     protein:0.01, unit:"g", density:0.70, defaultQty:8,  min:4,  max:800, step:2, costPerG:0.008 },
+    { id:"vx", name:"Vanilla Extract",        pct:null,      cal:2.88, fat:0,    carbs:0.13, sugar:0.04,  protein:0,    unit:"g", density:1.05, defaultQty:5,  min:2,  max:800, step:1, costPerG:0.06  },
+    { id:"cp", name:"Cocoa Powder",           pct:null,      cal:2.28, fat:0.14, carbs:0.58, sugar:0.02,  protein:0.20, unit:"g", density:0.64, defaultQty:15, min:5,  max:800, step:5, costPerG:0.012 },
+    { id:"mz", name:"Matcha Powder",          pct:null,      cal:2.0,  fat:0,    carbs:0.38, sugar:0,     protein:0.15, unit:"g", density:0.50, defaultQty:5,  min:2,  max:800, step:1, costPerG:0.04  },
+    { id:"pb", name:"Peanut Butter",          pct:null,      cal:5.88, fat:0.50, carbs:0.20, sugar:0.05,  protein:0.25, unit:"g", density:1.08, defaultQty:30, min:10, max:800, step:5, costPerG:0.008 },
+    { id:"ab", name:"Almond Butter",          pct:null,      cal:6.14, fat:0.56, carbs:0.19, sugar:0.04,  protein:0.21, unit:"g", density:1.07, defaultQty:30, min:10, max:800, step:5, costPerG:0.015 },
+    { id:"ls", name:"Lemon Juice",            pct:null,      cal:0.22, fat:0,    carbs:0.07, sugar:0.025, protein:0.004,unit:"g", density:1.03, defaultQty:15, min:5,  max:800, step:5, costPerG:0.003 },
+    { id:"cx", name:"Cinnamon",               pct:null,      cal:2.47, fat:0.12, carbs:0.81, sugar:0.02,  protein:0.04, unit:"g", density:0.56, defaultQty:3,  min:1,  max:800, step:1, costPerG:0.02  },
+  ],
+  "🍓 Fruits (frozen)": [
+    { id:"fb",  name:"Strawberries", pct:null,         cal:0.32,fat:0.003,carbs:0.077,sugar:0.047,protein:0.007,unit:"g",density:0.72,defaultQty:80, min:20,max:800,step:10,costPerG:0.006 },
+    { id:"mb",  name:"Blueberries",  pct:null,         cal:0.57,fat:0.003,carbs:0.145,sugar:0.10, protein:0.007,unit:"g",density:0.64,defaultQty:80, min:20,max:800,step:10,costPerG:0.008 },
+    { id:"rs",  name:"Raspberries",  pct:null,         cal:0.52,fat:0.006,carbs:0.118,sugar:0.043,protein:0.012,unit:"g",density:0.50,defaultQty:80, min:20,max:800,step:10,costPerG:0.010 },
+    { id:"mn2", name:"Mango",        pct:null,         cal:0.60,fat:0.004,carbs:0.150,sugar:0.14, protein:0.008,unit:"g",density:0.80,defaultQty:100,min:30,max:800,step:10,costPerG:0.006 },
+    { id:"pc",  name:"Peach",        pct:null,         cal:0.39,fat:0.003,carbs:0.099,sugar:0.08, protein:0.009,unit:"g",density:0.77,defaultQty:100,min:30,max:800,step:10,costPerG:0.005 },
+    { id:"pi",  name:"Pineapple",    pct:null,         cal:0.50,fat:0.001,carbs:0.131,sugar:0.10, protein:0.005,unit:"g",density:0.79,defaultQty:100,min:30,max:800,step:10,costPerG:0.005 },
+    { id:"bn",  name:"Banana",       pct:"fresh/ripe", cal:0.89,fat:0.003,carbs:0.229,sugar:0.12, protein:0.011,unit:"g",density:0.96,defaultQty:60, min:20,max:800,step:10,costPerG:0.002 },
+  ],
+  "🍪 Mix-ins": [
+    { id:"cc2", name:"Dark Choc Chips", pct:null, cal:5.46,fat:0.31,carbs:0.60,sugar:0,    protein:0.05,unit:"g",density:1.30,defaultQty:20,min:5,max:800,step:5,costPerG:0.02  },
+    { id:"oc",  name:"Oreo Crumbles",   pct:null, cal:4.71,fat:0.21,carbs:0.67,sugar:0.35, protein:0.05,unit:"g",density:0.60,defaultQty:20,min:5,max:800,step:5,costPerG:0.015 },
+  ],
+  "💪 Protein & Texture": [
+    { id:"pw",  name:"Whey Protein",      pct:"vanilla", cal:4.0, fat:0.08,carbs:0.08,sugar:0.01, protein:0.80,unit:"g",density:0.55,defaultQty:30,min:10,max:800,step:5,  costPerG:0.04 },
+    { id:"cp2", name:"Collagen Peptides", pct:null,      cal:3.57,fat:0,   carbs:0,   sugar:0,    protein:0.90,unit:"g",density:0.60,defaultQty:10,min:5, max:800,step:5,  costPerG:0.05 },
+    { id:"xs",  name:"Xanthan Gum",       pct:null,      cal:3.33,fat:0,   carbs:0.83,sugar:0,    protein:0,   unit:"g",density:0.60,defaultQty:1, min:0.5,max:800,step:0.5,costPerG:0.05 },
+  ],
+};
+
+const DEFAULT_LOOKUP = {};
+Object.values(INGREDIENTS_DEFAULT).flat().forEach(i => { DEFAULT_LOOKUP[i.id] = i; });
+
+const CAT_COLORS = {
+  "🥛 Base":              "#E8A87C",
+  "🍬 Sweeteners":        "#E87CC4",
+  "🍫 Flavors":           "#9B7CE8",
+  "🍓 Fruits (frozen)":   "#7CE8A0",
+  "🍪 Mix-ins":           "#E8C47C",
+  "💪 Protein & Texture": "#7CB9E8",
+};
+
+const STATUS_CONFIG = {
+  wishlist: { label:"Wishlist", emoji:"🌟", color:"#9B7CE8" },
+  tried:    { label:"Tried",    emoji:"✅", color:"#7CB9E8" },
+  favorite: { label:"Favorite", emoji:"❤️",  color:"#E87C7C" },
+};
+
+const RATING_DIMS = {
+  texture:    { label:"Texture",        emoji:"🧊", color:"#7CB9E8" },
+  flavor:     { label:"Flavor",         emoji:"🍓", color:"#E87CC4" },
+  sweetness:  { label:"Sweetness",      emoji:"🍬", color:"#E87CC4" },
+  creaminess: { label:"Creaminess",     emoji:"🥛", color:"#E8A87C" },
+  iciness:    { label:"Iciness",        emoji:"❄️",  color:"#7CB9E8" },
+  freeze:     { label:"Freeze quality", emoji:"🧊", color:"#7CB9E8" },
+  spin:       { label:"Spin result",    emoji:"⚙️",  color:"#9B7CE8" },
+  visual:     { label:"Visual appeal",  emoji:"✨", color:"#E8C47C" },
+  satiety:    { label:"Satisfaction",   emoji:"💪", color:"#7CE8A0" },
+  repeat:     { label:"Make again?",    emoji:"🔁", color:"#7CE8A0" },
+};
+const ACTIVE_RATINGS = ["texture","flavor"];
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+function fmt(v) { return v>=10?`${Math.round(v)}g`:`${Math.round(v*10)/10}g`; }
+function fmtCost(v) { return (!v||v<0.005)?"—":`€${v.toFixed(2)}`; }
+function rgb(hex) {
+  return `${parseInt(hex.slice(1,3),16)},${parseInt(hex.slice(3,5),16)},${parseInt(hex.slice(5,7),16)}`;
+}
+function mkBtn(ac) {
+  return { background:`rgba(${rgb(ac)},0.12)`,border:`1px solid rgba(${rgb(ac)},0.3)`,borderRadius:5,color:ac,cursor:"pointer",width:22,height:22,fontSize:14,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",padding:0,flexShrink:0 };
+}
+function isOverridden(id, field, value) {
+  const def = DEFAULT_LOOKUP[id];
+  if (!def) return false;
+  if (field==="name")     return def.name !== value;
+  if (field==="pct")      return (def.pct||"") !== (value||"");
+  if (field==="cal")      return Math.abs(def.cal - value) > 0.0001;
+  if (field==="costPerG") return Math.abs((def.costPerG||0) - (value||0)) > 0.000001;
+  return false;
+}
+
+// Fuzzy ingredient matching — returns {ing, confidence:"exact"|"partial"|"fuzzy"|null}
+function fuzzyMatch(name, defs) {
+  const lower = (name||"").toLowerCase().trim();
+  const all = Object.values(defs).flat();
+  const exact = all.find(i => i.name.toLowerCase() === lower);
+  if (exact) return { ing:exact, confidence:"exact" };
+  const partial = all.find(i => lower.includes(i.name.toLowerCase()) || i.name.toLowerCase().includes(lower));
+  if (partial) return { ing:partial, confidence:"partial" };
+  const words = lower.split(/[\s,]+/).filter(w=>w.length>3);
+  const fuzzy = all.find(i => { const dw=i.name.toLowerCase().split(/\s+/); return dw.some(w=>w.length>3&&words.some(ew=>ew.includes(w)||w.includes(ew))); });
+  if (fuzzy) return { ing:fuzzy, confidence:"fuzzy" };
+  return null;
+}
+
+// ── StarRating ─────────────────────────────────────────────────────────────
+function StarRating({ value=0, onChange, max=5, color="#E8C47C", size=15 }) {
+  const [hover,setHover]=useState(0);
+  return (
+    <div style={{display:"flex",gap:1,alignItems:"center"}}>
+      {Array.from({length:max},(_,i)=>i+1).map(s=>(
+        <span key={s} onClick={()=>onChange(s===value?0:s)} onMouseOver={()=>setHover(s)} onMouseOut={()=>setHover(0)}
+          style={{cursor:"pointer",fontSize:size,lineHeight:1,display:"inline-block",color:s<=(hover||value)?color:"rgba(255,255,255,0.13)",transition:"color 0.1s,transform 0.1s",transform:s<=(hover||value)?"scale(1.2)":"scale(1)"}}>★</span>
+      ))}
+      {value>0&&<span style={{fontSize:9,color:"#555",marginLeft:3}}>{value}/{max}</span>}
+    </div>
+  );
+}
+
+// ── VolumeBar ─────────────────────────────────────────────────────────────
+function VolumeBar({ recipeItems }) {
+  const ml=recipeItems.reduce((s,i)=>s+(i.qty/(i.density||1)),0);
+  const pct=Math.min(ml/CONTAINER_MAX_ML*100,115);
+  const over=ml>CONTAINER_MAX_ML, diff=Math.abs(Math.round(ml-CONTAINER_MAX_ML));
+  const col=over?"#ff7070":ml>CONTAINER_MAX_ML*0.9?"#E8C47C":"#7CE8A0";
+  return (
+    <div style={{background:"rgba(255,255,255,0.06)",borderRadius:10,padding:"10px 12px",border:"1px solid rgba(255,255,255,0.08)"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+        <div style={{fontSize:9.5,color:"#666",textTransform:"uppercase",letterSpacing:1}}>Container volume</div>
+        <div style={{fontSize:11,fontWeight:700,color:col}}>
+          {Math.round(ml)} / {CONTAINER_MAX_ML} ml
+          {recipeItems.length>0&&<span style={{marginLeft:6,fontSize:10,fontWeight:400,color:over?"#ff7070":"#7CE8A0"}}>{over?`▲ ${diff}ml over`:`▼ ${diff}ml remaining`}</span>}
+        </div>
+      </div>
+      <div style={{background:"rgba(255,255,255,0.08)",borderRadius:4,height:8,overflow:"hidden"}}>
+        <div style={{width:`${Math.min(pct,100)}%`,height:"100%",background:`linear-gradient(90deg,${col}99,${col})`,borderRadius:4,transition:"width 0.3s"}}/>
+      </div>
+    </div>
+  );
+}
+
+// ── CostEntryPopover ──────────────────────────────────────────────────────
+// Shows €/kg for easier real-world pricing
+function CostEntryPopover({ onConfirm, onClose }) {
+  const [price,setPrice]=useState("");
+  const [weight,setWeight]=useState("");
+  const [unit,setUnit]=useState("g");
+  const ref=useRef();
+  useEffect(()=>{
+    const h=e=>{if(ref.current&&!ref.current.contains(e.target))onClose();};
+    document.addEventListener("mousedown",h);
+    return()=>document.removeEventListener("mousedown",h);
+  },[onClose]);
+  const wg = unit==="kg" ? parseFloat(weight||0)*1000 : parseFloat(weight||0);
+  const derived = (wg>0 && parseFloat(price||0)>0) ? parseFloat(price)/wg : null;  // €/g
+  const iS = {background:"rgba(255,255,255,0.09)",border:"1px solid rgba(255,255,255,0.18)",borderRadius:5,padding:"4px 7px",color:"#fff",fontSize:12,outline:"none",width:"100%",boxSizing:"border-box"};
+  return (
+    <div ref={ref} style={{position:"absolute",zIndex:300,top:"calc(100% + 6px)",right:0,width:250,background:"#1a1730",border:"1px solid rgba(124,232,160,0.45)",borderRadius:10,padding:"12px 13px",boxShadow:"0 12px 36px rgba(0,0,0,0.65)"}}>
+      <div style={{fontSize:9,color:"#555",marginBottom:8,textTransform:"uppercase",letterSpacing:0.8}}>Package cost calculator</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",alignItems:"center",gap:6}}>
+        <div style={{display:"flex",alignItems:"center",gap:4}}>
+          <span style={{fontSize:11,color:"#888",flexShrink:0}}>€</span>
+          <input autoFocus type="number" min={0} step={0.01} value={price} onChange={e=>setPrice(e.target.value)} placeholder="1.59" style={iS}/>
+        </div>
+        <span style={{fontSize:10,color:"#444",textAlign:"center"}}>for</span>
+        <div style={{display:"flex",alignItems:"center",gap:3}}>
+          <input type="number" min={0} step={1} value={weight} onChange={e=>setWeight(e.target.value)} placeholder="800" style={{...iS,flex:1,minWidth:0}}/>
+          <div style={{display:"flex",borderRadius:5,overflow:"hidden",border:"1px solid rgba(255,255,255,0.13)",flexShrink:0}}>
+            {["g","kg"].map(u=>(
+              <button key={u} onClick={()=>setUnit(u)} style={{background:unit===u?"rgba(124,232,160,0.2)":"transparent",border:"none",color:unit===u?"#7CE8A0":"#555",fontSize:10,fontWeight:700,cursor:"pointer",padding:"4px 7px"}}>{u}</button>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div style={{marginTop:8,padding:"5px 8px",background:"rgba(255,255,255,0.04)",borderRadius:6,minHeight:24,display:"flex",alignItems:"center"}}>
+        {derived!==null
+          ?<span style={{fontSize:11,color:"#7CE8A0"}}>→ <strong>€{(derived*1000).toFixed(2)}</strong>/kg</span>
+          :<span style={{fontSize:11,color:"#444"}}>Enter price &amp; weight above</span>
+        }
+      </div>
+      <div style={{display:"flex",gap:6,marginTop:8}}>
+        <button onClick={onClose} style={{flex:1,background:"none",border:"1px solid rgba(255,255,255,0.12)",borderRadius:6,color:"#666",fontSize:10,padding:"5px",cursor:"pointer"}}>Cancel</button>
+        <button onClick={()=>{if(derived!==null){onConfirm(derived);onClose();}}} disabled={derived===null}
+          style={{flex:2,background:derived?"rgba(124,232,160,0.2)":"rgba(255,255,255,0.05)",border:`1px solid rgba(124,232,160,${derived?0.55:0.15})`,borderRadius:6,color:derived?"#7CE8A0":"#555",fontSize:10,fontWeight:700,padding:"5px",cursor:derived?"pointer":"not-allowed"}}>
+          ✓ Apply
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── MappingDialog ─────────────────────────────────────────────────────────
+// Confirmation popup for ingredient matching on import
+function MappingDialog({ extracted, recipeName, source, defs, onConfirm, onCancel }) {
+  const allIngs = Object.values(defs).flat().sort((a,b)=>a.name.localeCompare(b.name));
+
+  const [name,  setName]  = useState(recipeName||"Imported Recipe");
+  const [rows,  setRows]  = useState(() =>
+    extracted.map(ext => {
+      const m = fuzzyMatch(ext.name, defs);
+      return { fromName:ext.name, qty:ext.qty||0, selectedId: m?.ing.id||"__skip", confidence: m?.confidence||null };
+    })
+  );
+
+  const upd = (idx, changes) => setRows(r => r.map((x,i)=>i===idx?{...x,...changes}:x));
+
+  const confirmBadge = conf => conf==="exact"?"✅":conf==="partial"?"🟡":conf==="fuzzy"?"🔶":"❓";
+  const confirmLabel = conf => conf==="exact"?"Exact match":conf==="partial"?"Partial match":conf==="fuzzy"?"Fuzzy match":"No match";
+
+  const readyCount = rows.filter(r=>r.selectedId!=="__skip").length;
+
+  const doConfirm = () => {
+    const items = rows
+      .filter(r=>r.selectedId!=="__skip")
+      .map(r=>{ const ing=allIngs.find(i=>i.id===r.selectedId); return {ing,qty:r.qty}; })
+      .filter(r=>r.ing);
+    onConfirm({name, source, matched:items});
+  };
+
+  const selStyle = {
+    background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.18)",
+    borderRadius:5,padding:"4px 7px",color:"#fff",fontSize:11,outline:"none",
+    width:"100%",boxSizing:"border-box",cursor:"pointer",
+  };
+
+  return (
+    <div style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,0.75)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+      <div style={{background:"#1a1730",borderRadius:14,border:"1px solid rgba(255,255,255,0.12)",width:"100%",maxWidth:680,maxHeight:"85vh",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"0 20px 60px rgba(0,0,0,0.8)"}}>
+
+        {/* Header */}
+        <div style={{padding:"14px 16px 10px",borderBottom:"1px solid rgba(255,255,255,0.08)"}}>
+          <div style={{fontSize:14,fontWeight:700,marginBottom:8}}>🔗 Review ingredient mapping</div>
+          <input value={name} onChange={e=>setName(e.target.value)}
+            style={{width:"100%",boxSizing:"border-box",background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:7,padding:"6px 10px",color:"#fff",fontSize:13,fontWeight:700,fontFamily:"Georgia,serif",outline:"none",marginBottom:6}}/>
+          <div style={{fontSize:10,color:"#555"}}>
+            Map each extracted ingredient to your database. Amber = fuzzy suggestion — check carefully.
+          </div>
+        </div>
+
+        {/* Rows */}
+        <div style={{overflowY:"auto",flex:1,padding:"10px 16px",display:"flex",flexDirection:"column",gap:7}}>
+          {rows.map((row,idx)=>{
+            const curIng = allIngs.find(i=>i.id===row.selectedId);
+            const isSkip = row.selectedId==="__skip";
+            return (
+              <div key={idx} style={{background:isSkip?"rgba(255,255,255,0.03)":"rgba(255,255,255,0.05)",borderRadius:8,padding:"8px 10px",border:`1px solid ${isSkip?"rgba(255,255,255,0.07)":row.confidence==="exact"?"rgba(124,232,160,0.25)":row.confidence==="partial"?"rgba(232,196,124,0.25)":"rgba(232,124,100,0.25)"}`,opacity:isSkip?0.55:1}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                  {/* Confidence badge */}
+                  <span title={confirmLabel(row.confidence)} style={{fontSize:13,flexShrink:0}}>{isSkip?"⏭️":confirmBadge(row.confidence)}</span>
+                  {/* From name */}
+                  <div style={{fontSize:11,color:"#888",fontStyle:"italic",flex:"0 1 140px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={row.fromName}>"{row.fromName}"</div>
+                  <div style={{fontSize:10,color:"#555",flexShrink:0}}>→</div>
+                  {/* Select */}
+                  <select value={row.selectedId} onChange={e=>upd(idx,{selectedId:e.target.value,confidence:e.target.value==="__skip"?null:row.confidence})}
+                    style={{...selStyle,flex:"1 1 160px",color:isSkip?"#555":"#fff"}}>
+                    <option value="__skip">— Skip this ingredient</option>
+                    {allIngs.map(i=><option key={i.id} value={i.id}>{i.name}{i.pct?` (${i.pct})`:""}</option>)}
+                  </select>
+                  {/* Qty */}
+                  <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
+                    <input type="number" min={0} value={row.qty} onChange={e=>upd(idx,{qty:parseFloat(e.target.value)||0})}
+                      style={{width:54,background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:5,padding:"4px 6px",color:"#fff",fontSize:11,outline:"none",textAlign:"center"}}/>
+                    <span style={{fontSize:10,color:"#555"}}>g</span>
+                  </div>
+                </div>
+                {/* Show current selection subtitle */}
+                {curIng&&curIng.pct&&!isSkip&&(
+                  <div style={{fontSize:9.5,color:"#555",marginTop:3,paddingLeft:24}}>{curIng.name} · {curIng.pct}</div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Footer */}
+        <div style={{padding:"10px 16px 14px",borderTop:"1px solid rgba(255,255,255,0.08)",display:"flex",gap:8,alignItems:"center"}}>
+          <div style={{flex:1,fontSize:10.5,color:"#555"}}>{readyCount} ingredient{readyCount!==1?"s":""} will be added</div>
+          <button onClick={onCancel} style={{background:"none",border:"1px solid rgba(255,255,255,0.12)",borderRadius:7,color:"#666",fontSize:11,padding:"7px 16px",cursor:"pointer"}}>Cancel</button>
+          <button onClick={doConfirm} disabled={readyCount===0}
+            style={{background:readyCount>0?"rgba(155,124,232,0.25)":"rgba(255,255,255,0.05)",border:`1px solid rgba(155,124,232,${readyCount>0?0.5:0.15})`,borderRadius:7,color:readyCount>0?"#9B7CE8":"#555",fontSize:11,fontWeight:700,padding:"7px 18px",cursor:readyCount>0?"pointer":"not-allowed"}}>
+            🌟 Save as Wishlist
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── RecipeCard ────────────────────────────────────────────────────────────
+function RecipeCard({ saved, onLoad, onDelete, onUpdate }) {
+  const [editComment,setEditComment]=useState(false);
+  const [comment,setComment]=useState(saved.comment||"");
+  const [editSource,setEditSource]=useState(false);
+  const [source,setSource]=useState(saved.source||"");
+  const sc=STATUS_CONFIG[saved.status];
+  const ratings=saved.ratings||{};
+  const cycleStatus=()=>{ const o=["wishlist","tried","favorite"]; onUpdate({...saved,status:o[(o.indexOf(saved.status)+1)%o.length]}); };
+  const setRating=(k,v)=>onUpdate({...saved,ratings:{...ratings,[k]:v}});
+  return (
+    <div style={{background:"rgba(255,255,255,0.05)",borderRadius:8,border:`1px solid rgba(${rgb(sc.color)},0.3)`,padding:"8px 10px"}}>
+      <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:4}}>
+        <button onClick={cycleStatus} style={{background:`rgba(${rgb(sc.color)},0.15)`,border:`1px solid rgba(${rgb(sc.color)},0.4)`,borderRadius:5,cursor:"pointer",fontSize:12,padding:"2px 5px",color:sc.color}}>{sc.emoji}</button>
+        <div style={{flex:1,fontSize:12,fontWeight:700,color:"#fff"}}>{saved.name}</div>
+        {saved.totals.cost>0&&<div style={{fontSize:10,color:"#7CE8A0"}}>{fmtCost(saved.totals.cost)}</div>}
+        <div style={{fontSize:10,color:"#666"}}>{Math.round(saved.totals.cal)} kcal</div>
+        <button onClick={()=>onLoad(saved)} style={{background:"rgba(124,185,232,0.15)",border:"1px solid rgba(124,185,232,0.3)",borderRadius:5,color:"#7CB9E8",cursor:"pointer",fontSize:10,padding:"2px 6px"}}>Load</button>
+        <button onClick={()=>onDelete(saved.id)} style={{background:"none",border:"none",color:"#ff7070",cursor:"pointer",fontSize:11}}>✕</button>
+      </div>
+      <div style={{fontSize:9.5,color:"#555",marginBottom:5}}>{saved.ingredients.map(i=>i.name).join(", ")}</div>
+      {/* Source */}
+      <div style={{marginBottom:5}}>
+        {editSource?(
+          <div style={{display:"flex",gap:4}}>
+            <input value={source} onChange={e=>setSource(e.target.value)} placeholder="Paste recipe URL…"
+              style={{flex:1,background:"rgba(255,255,255,0.08)",border:"1px solid rgba(124,185,232,0.3)",borderRadius:5,padding:"3px 7px",color:"#7CB9E8",fontSize:11,outline:"none"}}/>
+            <button onClick={()=>{onUpdate({...saved,source});setEditSource(false);}} style={{background:"rgba(124,232,160,0.15)",border:"1px solid rgba(124,232,160,0.3)",borderRadius:5,color:"#7CE8A0",cursor:"pointer",fontSize:10,padding:"3px 7px"}}>Save</button>
+          </div>
+        ):(
+          <div style={{display:"flex",alignItems:"center",gap:5}}>
+            <span style={{fontSize:9.5,color:"#555"}}>🔗</span>
+            {saved.source
+              ?<a href={saved.source} target="_blank" rel="noopener noreferrer" style={{fontSize:10,color:"#7CB9E8",textDecoration:"none",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,maxWidth:280}} title={saved.source}>{saved.source.replace(/^https?:\/\/(www\.)?/,"").split("/")[0]}</a>
+              :<span onClick={()=>setEditSource(true)} style={{fontSize:10,color:"#444",cursor:"pointer",fontStyle:"italic"}}>+ add source link</span>
+            }
+            {saved.source&&<button onClick={()=>setEditSource(true)} style={{background:"none",border:"none",color:"#555",cursor:"pointer",fontSize:10,padding:0}}>✏️</button>}
+          </div>
+        )}
+      </div>
+      {/* Ratings */}
+      <div style={{display:"flex",gap:12,marginBottom:5,flexWrap:"wrap"}}>
+        {ACTIVE_RATINGS.map(k=>{const d=RATING_DIMS[k];if(!d)return null;return(<div key={k} style={{display:"flex",alignItems:"center",gap:5}}><span style={{fontSize:10,color:"#555"}}>{d.emoji} {d.label}</span><StarRating value={ratings[k]||0} onChange={v=>setRating(k,v)} size={14} color={d.color}/></div>);})}
+      </div>
+      {/* Note */}
+      {editComment?(
+        <div style={{display:"flex",gap:4}}>
+          <input value={comment} onChange={e=>setComment(e.target.value)} placeholder="Add a note…" style={{flex:1,background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:5,padding:"3px 7px",color:"#fff",fontSize:11,outline:"none"}}/>
+          <button onClick={()=>{onUpdate({...saved,comment});setEditComment(false);}} style={{background:"rgba(124,232,160,0.15)",border:"1px solid rgba(124,232,160,0.3)",borderRadius:5,color:"#7CE8A0",cursor:"pointer",fontSize:10,padding:"3px 7px"}}>Save</button>
+        </div>
+      ):(
+        <div onClick={()=>setEditComment(true)} style={{fontSize:10.5,color:saved.comment?"#bbb":"#444",cursor:"pointer",fontStyle:saved.comment?"normal":"italic"}}>{saved.comment||"＋ add note…"}</div>
+      )}
+    </div>
+  );
+}
+
+// ── NumInput ──────────────────────────────────────────────────────────────
+// Controlled decimal input that doesn't fight you while typing.
+// Accepts both "." and "," as decimal separators.
+function NumInput({ value, onChange, style, placeholder }) {
+  const [str, setStr] = useState(value === 0 ? "" : String(value));
+
+  // Sync display if value changed externally (e.g. revert button)
+  useEffect(() => {
+    setStr(value === 0 ? "" : String(value));
+  }, [value]);
+
+  const handleChange = (e) => {
+    const raw = e.target.value;
+    setStr(raw);
+    // Normalise comma → period and attempt parse
+    const n = parseFloat(raw.replace(",", "."));
+    if (!isNaN(n)) onChange(n);
+  };
+
+  const handleBlur = (e) => {
+    const n = parseFloat(e.target.value.replace(",", "."));
+    if (!isNaN(n)) {
+      onChange(n);
+      setStr(String(n));
+    } else {
+      // Revert display to last good value
+      setStr(value === 0 ? "" : String(value));
+    }
+  };
+
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      value={str}
+      placeholder={placeholder || "0"}
+      onChange={handleChange}
+      onBlur={handleBlur}
+      style={style}
+    />
+  );
+}
+
+// ── DefaultsEditor ────────────────────────────────────────────────────────
+function DefaultsEditor({ defs, onSave, onReset }) {
+  const [local,setLocal]=useState(()=>JSON.parse(JSON.stringify(defs)));
+  const [dirty,setDirty]=useState(false);
+  const [popKey,setPopKey]=useState(null);
+  const [newId,setNewId]=useState(null);
+  const [scanning,setScanning]=useState(false);
+  const [scanTarget,setScanTarget]=useState(null);
+  const [ingUrlScan,setIngUrlScan]=useState(null); // {key, url} for per-ingredient URL scan
+  const scanFileRef=useRef();
+
+  useEffect(()=>{setLocal(JSON.parse(JSON.stringify(defs)));setDirty(false);},[defs]);
+
+  // Store as per-gram; display/edit as per-100g
+  const upd=(cat,idx,field,raw)=>{
+    const v=(field==="name"||field==="pct")?raw:(parseFloat(raw)||0);
+    setLocal(p=>({...p,[cat]:p[cat].map((x,i)=>i===idx?{...x,[field]:v}:x)}));
+    setDirty(true);
+  };
+  const upd100=(cat,idx,field,val100)=>{
+    // val100 is already a number (from NumInput onChange)
+    setLocal(p=>({...p,[cat]:p[cat].map((x,i)=>i===idx?{...x,[field]:val100/100}:x)}));
+    setDirty(true);
+  };
+
+  const triggerScan=(cat,idx)=>{ setScanTarget({cat,idx}); scanFileRef.current.value=""; scanFileRef.current.click(); };
+  const handleScanFile=async(file)=>{
+    if(!file||!scanTarget)return;
+    setScanning(true);
+    const reader=new FileReader();
+    reader.onload=async(ev)=>{
+      const b64=ev.target.result.split(",")[1];
+      const mime=file.type||"image/jpeg";
+      try{
+        const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:400,
+            messages:[{role:"user",content:[
+              {type:"image",source:{type:"base64",media_type:mime,data:b64}},
+              {type:"text",text:'Read the nutritional information table from this product label. Return ONLY valid JSON (no markdown):\n{"name":"<product name>","kcal":number,"fat":number,"carbs":number,"sugar":number,"protein":number}\nAll values per 100g.'},
+            ]}]})});
+        const data=await res.json();
+        const txt=data.content.filter(b=>b.type==="text").map(b=>b.text).join("");
+        const m=txt.match(/\{[\s\S]*?\}/);
+        if(!m)throw new Error("No data found in image");
+        const v=JSON.parse(m[0]);
+        const {cat,idx}=scanTarget;
+        setLocal(p=>({...p,[cat]:p[cat].map((x,i)=>i===idx?{...x,
+          ...(v.name&&!x.name?{name:v.name}:{}),
+          cal:(v.kcal||0)/100, fat:(v.fat||0)/100,
+          carbs:(v.carbs||0)/100, sugar:(v.sugar||0)/100,
+          protein:(v.protein||0)/100,
+        }:x)}));
+        setDirty(true);
+      }catch(e){ alert("Couldn't read label: "+e.message); }
+      setScanning(false);setScanTarget(null);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const scanFromUrl = async (cat, idx, url) => {
+    if (!url.trim()) return;
+    setScanning(true); setScanTarget({cat,idx}); setIngUrlScan(null);
+    try {
+      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:500,
+          tools:[{type:"web_search_20250305",name:"web_search"}],
+          messages:[{role:"user",content:`Look up this product page and extract nutritional info per 100g: ${url}\nReturn ONLY valid JSON (no markdown):\n{"name":"<product>","kcal":number,"fat":number,"carbs":number,"sugar":number,"protein":number}`}]})});
+      const data=await res.json();
+      const txt=data.content.filter(b=>b.type==="text").map(b=>b.text).join("");
+      const m=txt.match(/\{[\s\S]*?\}/);
+      if(!m) throw new Error("No nutritional data found for that URL");
+      const v=JSON.parse(m[0]);
+      setLocal(p=>({...p,[cat]:p[cat].map((x,i)=>i===idx?{...x,
+        ...(v.name&&!x.name?{name:v.name}:{}),
+        cal:(v.kcal||0)/100, fat:(v.fat||0)/100,
+        carbs:(v.carbs||0)/100, sugar:(v.sugar||0)/100,
+        protein:(v.protein||0)/100,
+      }:x)}));
+      setDirty(true);
+    } catch(e) { alert("Couldn't fetch label: "+e.message); }
+    setScanning(false); setScanTarget(null);
+  };
+
+  const applyPkg=(cat,idx,cpg)=>{ setLocal(p=>({...p,[cat]:p[cat].map((x,i)=>i===idx?{...x,costPerG:cpg}:x)})); setDirty(true); setPopKey(null); };
+  const del=(cat,idx)=>{ if(!window.confirm(`Remove "${local[cat][idx].name}"?`))return; setLocal(p=>({...p,[cat]:p[cat].filter((_,i)=>i!==idx)})); setDirty(true); };
+  const CAT_DEFAULTS = {
+    "🥛 Base":              { defaultQty:300, min:50,  max:800, step:10 },
+    "🍬 Sweeteners":        { defaultQty:20,  min:1,   max:800, step:5  },
+    "🍫 Flavors":           { defaultQty:15,  min:1,   max:800, step:5  },
+    "🍓 Fruits (frozen)":   { defaultQty:80,  min:10,  max:800, step:10 },
+    "🍪 Mix-ins":           { defaultQty:20,  min:5,   max:800, step:5  },
+    "💪 Protein & Texture": { defaultQty:25,  min:1,   max:800, step:5  },
+  };
+  const add=(cat)=>{
+    const cd = CAT_DEFAULTS[cat] || { defaultQty:50, min:1, max:800, step:5 };
+    const id = `custom_${Date.now()}`;
+    setLocal(p=>({...p,[cat]:[...p[cat],{id,name:"",pct:null,cal:0,fat:0,carbs:0,protein:0,unit:"g",density:1,...cd,costPerG:0}]}));
+    setNewId(id);
+    setDirty(true);
+  };
+  const [addPanel, setAddPanel] = useState(null); // {cat, loading, fields, error, url}
+  const addFileRef = useRef();
+
+  const openAddPanel  = (cat) => setAddPanel({cat, loading:false, fields:null, error:"", url:""});
+  const closeAddPanel = () => setAddPanel(null);
+  const updAddField   = (f, v) => setAddPanel(p=>({...p, fields:{...p.fields, [f]:v}}));
+
+  const applyExtracted = (v) => setAddPanel(p=>({...p, loading:false, fields:{
+    name:v.name||"", pct:"", kcal:v.kcal||0, fat:v.fat||0, carbs:v.carbs||0, sugar:v.sugar||0, protein:v.protein||0, eurKg:0,
+  }}));
+
+  const extractAddImage = async (file) => {
+    if(!file||!addPanel)return;
+    setAddPanel(p=>({...p,loading:true,error:""}));
+    const reader=new FileReader();
+    reader.onload=async(ev)=>{
+      try{
+        const b64=ev.target.result.split(",")[1],mime=file.type||"image/jpeg";
+        const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:400,
+            messages:[{role:"user",content:[
+              {type:"image",source:{type:"base64",media_type:mime,data:b64}},
+              {type:"text",text:'Read nutritional values from this product label. Return ONLY valid JSON:\n{"name":"<product>","kcal":number,"fat":number,"carbs":number,"sugar":number,"protein":number}\nAll per 100g.'}
+            ]}]})});
+        const data=await res.json();
+        const txt=data.content.filter(b=>b.type==="text").map(b=>b.text).join("");
+        const m=txt.match(/\{[\s\S]*?\}/);
+        if(!m)throw new Error("No data found in image");
+        applyExtracted(JSON.parse(m[0]));
+      }catch(e){setAddPanel(p=>({...p,loading:false,error:e.message}));}
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const extractAddUrl = async () => {
+    if(!addPanel?.url)return;
+    setAddPanel(p=>({...p,loading:true,error:""}));
+    try{
+      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:500,
+          tools:[{type:"web_search_20250305",name:"web_search"}],
+          messages:[{role:"user",content:`Look up this product page and extract nutritional info per 100g: ${addPanel.url}\nReturn ONLY valid JSON:\n{"name":"<product>","kcal":number,"fat":number,"carbs":number,"sugar":number,"protein":number}`}]})});
+      const data=await res.json();
+      const txt=data.content.filter(b=>b.type==="text").map(b=>b.text).join("");
+      const m=txt.match(/\{[\s\S]*?\}/);
+      if(!m)throw new Error("Could not find nutritional data for that URL");
+      applyExtracted(JSON.parse(m[0]));
+    }catch(e){setAddPanel(p=>({...p,loading:false,error:e.message}));}
+  };
+
+  const confirmAdd = () => {
+    if(!addPanel?.fields)return;
+    const {cat,fields}=addPanel;
+    const cd=CAT_DEFAULTS[cat]||{defaultQty:50,min:1,max:800,step:5};
+    const id=`custom_${Date.now()}`;
+    setLocal(p=>({...p,[cat]:[...p[cat],{
+      id, name:fields.name, pct:fields.pct||null,
+      cal:fields.kcal/100, fat:fields.fat/100, carbs:fields.carbs/100,
+      sugar:fields.sugar/100, protein:fields.protein/100,
+      unit:"g", density:1, ...cd, costPerG:fields.eurKg/1000,
+    }]}));
+    setNewId(id);
+    setDirty(true);
+    closeAddPanel();
+  };
+
+  const revert=(cat,idx,field)=>{ const def=DEFAULT_LOOKUP[local[cat][idx].id]; if(!def)return; upd(cat,idx,field,def[field]); };
+
+  const fInp=(val,ovr,extra={})=>({ width:"100%",boxSizing:"border-box",background:ovr?"rgba(232,200,100,0.1)":"rgba(255,255,255,0.07)",border:`1px solid ${ovr?"rgba(232,200,100,0.5)":"rgba(255,255,255,0.15)"}`,borderRadius:5,padding:"4px 7px",color:ovr?"#E8C87C":"#fff",fontSize:11,outline:"none",...extra });
+  const abtn=(color,on)=>({ background:`rgba(${rgb(color)},0.12)`,border:`1px solid rgba(${rgb(color)},0.35)`,borderRadius:6,color,cursor:on?"pointer":"not-allowed",fontSize:10.5,fontWeight:700,padding:"5px 12px",opacity:on?1:0.4 });
+
+  return (
+    <div style={{maxWidth:960,margin:"0 auto"}}>
+      {/* Hidden file input for label scanning */}
+      <input ref={scanFileRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>handleScanFile(e.target.files[0])}/>
+      <input ref={addFileRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>extractAddImage(e.target.files[0])}/>
+      {/* Legend + toolbar */}
+      <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:12,flexWrap:"wrap"}}>
+        <div style={{display:"flex",alignItems:"center",gap:5}}><div style={{width:10,height:10,borderRadius:2,background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.15)"}}/><span style={{fontSize:10,color:"#666"}}>Default</span></div>
+        <div style={{display:"flex",alignItems:"center",gap:5}}><div style={{width:10,height:10,borderRadius:2,background:"rgba(232,200,100,0.1)",border:"1px solid rgba(232,200,100,0.5)"}}/><span style={{fontSize:10,color:"#E8C87C"}}>Customised</span></div>
+        <div style={{display:"flex",alignItems:"center",gap:5}}><div style={{width:10,height:10,borderRadius:"50%",background:"#E87CC4",boxShadow:"0 0 4px #E87CC4"}}/><span style={{fontSize:10,color:"#E87CC4"}}>Your ingredient</span></div>
+        <div style={{flex:1}}/>
+        <div style={{display:"flex",gap:6}}>
+          <button disabled={!dirty} onClick={()=>{setLocal(JSON.parse(JSON.stringify(defs)));setDirty(false);}} style={abtn("#7CB9E8",dirty)}>Discard</button>
+          <button disabled={!dirty} onClick={()=>{onSave(local);setDirty(false);}} style={abtn("#7CE8A0",dirty)}>✓ Save</button>
+          <button onClick={()=>{if(window.confirm("Reset all to built-in defaults?"))onReset();}} style={{...abtn("#ff9090",true),opacity:1,cursor:"pointer"}}>↺ Reset all</button>
+        </div>
+      </div>
+
+      {Object.entries(local).map(([cat,ings])=>{
+        const color=CAT_COLORS[cat]||"#aaa";
+        return (
+          <div key={cat} style={{marginBottom:12,borderRadius:10,border:`1px solid rgba(${rgb(color)},0.2)`}}>
+            {/* Header row with column labels */}
+            <div style={{background:`rgba(${rgb(color)},0.13)`,padding:"7px 12px",borderBottom:`1px solid rgba(${rgb(color)},0.18)`,borderRadius:"10px 10px 0 0",display:"flex",alignItems:"center"}}>
+              <div style={{fontSize:12,fontWeight:700,color,flex:"1 1 120px"}}>{cat} <span style={{fontSize:10,color:"#555",fontWeight:400}}>({ings.length})</span></div>
+              <div style={{flex:"0 1 80px",fontSize:9,color:"#777",fontWeight:600,textAlign:"center",letterSpacing:0.5}}>SUBTYPE</div>
+              <div style={{flex:"0 0 90px",fontSize:9,color:"#f8cdda",fontWeight:600,textAlign:"center",letterSpacing:0.5}}>KCAL/100G</div>
+              <div style={{flex:"0 0 120px",fontSize:9,color:"#7CE8A0",fontWeight:600,textAlign:"center",letterSpacing:0.5}}>€/KG  (click!)</div>
+              <div style={{width:28}}/>
+            </div>
+
+            <div style={{padding:"8px 10px",display:"flex",flexDirection:"column",gap:6}}>
+              {ings.map((ing,idx)=>{
+                const pk=`${cat}||${idx}`;
+                const open=popKey===pk;
+                const def=DEFAULT_LOOKUP[ing.id];
+                const isCustom=!def;
+                const nameOvr=isOverridden(ing.id,"name",ing.name);
+                const pctOvr=isOverridden(ing.id,"pct",ing.pct);
+                const calOvr=isOverridden(ing.id,"cal",ing.cal);
+                const costOvr=isOverridden(ing.id,"costPerG",ing.costPerG);
+                const eurKg=(ing.costPerG||0)*1000;
+
+                return (
+                  <div key={ing.id} style={{display:"flex",flexDirection:"column",gap:3}}>
+                  {/* Main row */}
+                  <div style={{display:"flex",alignItems:"center",gap:6}}>
+                    {/* Status dot */}
+                    <div title={isCustom?"Your ingredient":(nameOvr||pctOvr||calOvr||costOvr)?"Has customised values":"Built-in default"}
+                      style={{width:7,height:7,borderRadius:"50%",flexShrink:0,background:isCustom?"#E87CC4":(nameOvr||pctOvr||calOvr||costOvr)?"#E8C87C":"rgba(255,255,255,0.18)",boxShadow:isCustom?"0 0 4px #E87CC4":(nameOvr||pctOvr||calOvr||costOvr)?"0 0 4px #E8C87C":"none"}}/>
+                    {/* Name — grows to fill space, but cedes to pct */}
+                    <div style={{flex:"1 1 120px",minWidth:80,display:"flex",gap:3,alignItems:"center"}}>
+                      <input
+                        ref={el=>{ if(el && ing.id===newId){ el.focus(); setNewId(null); } }}
+                        value={ing.name} onChange={e=>upd(cat,idx,"name",e.target.value)}
+                        placeholder="ingredient name…"
+                        style={fInp(ing.name,nameOvr)}/>
+                      {nameOvr&&<button onClick={()=>revert(cat,idx,"name")} title="Revert" style={{background:"none",border:"none",color:"#E8C87C",cursor:"pointer",fontSize:10,padding:0,flexShrink:0}}>↺</button>}
+                    </div>
+                    {/* Pct — inline, shrinks gracefully, styled subtle */}
+                    <div style={{flex:"0 1 80px",minWidth:52,display:"flex",gap:2,alignItems:"center"}}>
+                      <input value={ing.pct||""} onChange={e=>upd(cat,idx,"pct",e.target.value||null)}
+                        placeholder="1.5%…"
+                        style={fInp(ing.pct,pctOvr,{fontSize:10,padding:"4px 5px",color:pctOvr?"#E8C87C":"#666",fontStyle:ing.pct?"normal":"italic"})}/>
+                      {pctOvr&&<button onClick={()=>revert(cat,idx,"pct")} title="Revert" style={{background:"none",border:"none",color:"#E8C87C",cursor:"pointer",fontSize:10,padding:0,flexShrink:0}}>↺</button>}
+                    </div>
+                    {/* kcal/100g */}
+                    <div style={{flex:"0 0 80px",display:"flex",gap:3,alignItems:"center"}}>
+                      <NumInput value={Math.round(ing.cal*10000)/100} onChange={v=>upd100(cat,idx,"cal",v)}
+                        style={fInp(ing.cal,calOvr,{color:calOvr?"#E8C87C":"#f8cdda",textAlign:"center"})}/>
+                      {calOvr&&<button onClick={()=>revert(cat,idx,"cal")} title="Revert" style={{background:"none",border:"none",color:"#E8C87C",cursor:"pointer",fontSize:10,padding:0,flexShrink:0}}>↺</button>}
+                    </div>
+                    {/* €/kg */}
+                    <div style={{flex:"0 0 120px",position:"relative"}}>
+                      <button onClick={()=>setPopKey(open?null:pk)}
+                        style={{width:"100%",background:open?"rgba(124,232,160,0.18)":costOvr?"rgba(232,200,100,0.08)":"rgba(255,255,255,0.07)",
+                          border:`1px solid ${open?"rgba(124,232,160,0.55)":costOvr?"rgba(232,200,100,0.5)":"rgba(124,232,160,0.22)"}`,
+                          borderRadius:5,padding:"4px 7px",color:eurKg>0?(costOvr?"#E8C87C":"#7CE8A0"):"#444",fontSize:11,fontWeight:eurKg>0?700:400,cursor:"pointer",textAlign:"center"}}>
+                        {eurKg>0?`€${eurKg.toFixed(2)}/kg`:"set…"}
+                      </button>
+                      {open&&<CostEntryPopover onConfirm={v=>applyPkg(cat,idx,v)} onClose={()=>setPopKey(null)}/>}
+                    </div>
+                    {/* 📷 scan + 🔗 url for existing ingredient */}
+                    <button onClick={()=>triggerScan(cat,idx)} disabled={scanning}
+                      title="Scan product label photo"
+                      style={{background:"none",border:"1px solid rgba(155,124,232,0.3)",borderRadius:5,color:scanning&&scanTarget?.cat===cat&&scanTarget?.idx===idx?"#E8C87C":"#9B7CE8",cursor:"pointer",fontSize:12,padding:"3px 5px",flexShrink:0}}>
+                      {scanning&&scanTarget?.cat===cat&&scanTarget?.idx===idx?"⏳":"📷"}
+                    </button>
+                    <button onClick={()=>setIngUrlScan(ingUrlScan?.key===pk?null:{key:pk,url:""})}
+                      title="Look up product URL"
+                      style={{background:ingUrlScan?.key===pk?"rgba(124,185,232,0.2)":"none",border:`1px solid rgba(124,185,232,${ingUrlScan?.key===pk?0.5:0.3})`,borderRadius:5,color:"#7CB9E8",cursor:"pointer",fontSize:12,padding:"3px 5px",flexShrink:0}}>
+                      🔗
+                    </button>
+                    <button onClick={()=>del(cat,idx)} style={{background:"none",border:"none",color:"#ff7070",cursor:"pointer",fontSize:13,padding:"0 3px",flexShrink:0}}>✕</button>
+                  </div>
+                  {/* Inline URL scan input */}
+                  {ingUrlScan?.key===pk&&(
+                    <div style={{display:"flex",gap:4,paddingLeft:14,marginTop:2}}>
+                      <input autoFocus value={ingUrlScan.url} onChange={e=>setIngUrlScan(p=>({...p,url:e.target.value}))}
+                        onKeyDown={e=>e.key==="Enter"&&scanFromUrl(cat,idx,ingUrlScan.url)}
+                        placeholder="Paste product URL…"
+                        style={{flex:1,background:"rgba(255,255,255,0.08)",border:"1px solid rgba(124,185,232,0.35)",borderRadius:6,padding:"4px 8px",color:"#7CB9E8",fontSize:11,outline:"none"}}/>
+                      <button onClick={()=>scanFromUrl(cat,idx,ingUrlScan.url)} disabled={!ingUrlScan.url.trim()}
+                        style={{background:"rgba(124,185,232,0.15)",border:"1px solid rgba(124,185,232,0.4)",borderRadius:6,color:"#7CB9E8",fontSize:10,fontWeight:700,padding:"4px 10px",cursor:ingUrlScan.url.trim()?"pointer":"not-allowed",opacity:ingUrlScan.url.trim()?1:0.4}}>Go</button>
+                    </div>
+                  )}
+                  {/* Macros row — per 100g, compact */}
+                  <div style={{display:"flex",gap:6,paddingLeft:14,alignItems:"center",flexWrap:"wrap"}}>
+                    <span style={{fontSize:9,color:"#444",flexShrink:0}}>per 100g:</span>
+                    {[
+                      {f:"fat",    l:"Fat",     c:"#ffd6a5"},
+                      {f:"carbs",  l:"Carbs",   c:"#caffbf"},
+                      {f:"sugar",  l:"└Sugar",  c:"#a8d8a8"},
+                      {f:"protein",l:"Protein", c:"#a0c4ff"},
+                    ].map(({f,l,c})=>(
+                      <div key={f} style={{display:"flex",alignItems:"center",gap:2}}>
+                        <span style={{fontSize:9,color:c,flexShrink:0,whiteSpace:"nowrap"}}>{l}</span>
+                        <NumInput value={Math.round((ing[f]||0)*10000)/100} onChange={v=>upd100(cat,idx,f,v)}
+                          style={{width:38,background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:4,padding:"2px 4px",color:c,fontSize:10,outline:"none",textAlign:"center",fontFamily:"Georgia,serif"}}/>
+                      </div>
+                    ))}
+                    <span style={{fontSize:9,color:"#444"}}>g</span>
+                  </div>
+                  </div>
+                );
+              })}
+              {/* Add panel for this category */}
+              {addPanel?.cat===cat&&(
+                <div style={{background:"rgba(155,124,232,0.08)",border:"1px solid rgba(155,124,232,0.25)",borderRadius:8,padding:"10px 12px",marginTop:2}}>
+                  <div style={{fontSize:11,fontWeight:700,color:"#9B7CE8",marginBottom:8}}>📷 Add ingredient from label</div>
+                  {!addPanel.fields&&!addPanel.loading&&(
+                    <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:addPanel.error?6:0}}>
+                      <button onClick={()=>{addFileRef.current.value="";addFileRef.current.click();}}
+                        style={{background:"rgba(155,124,232,0.15)",border:"1px solid rgba(155,124,232,0.4)",borderRadius:6,color:"#9B7CE8",fontSize:11,fontWeight:700,padding:"6px 12px",cursor:"pointer"}}>
+                        📷 Upload photo
+                      </button>
+                      <div style={{display:"flex",gap:4,flex:1,minWidth:180}}>
+                        <input value={addPanel.url} onChange={e=>setAddPanel(p=>({...p,url:e.target.value}))}
+                          onKeyDown={e=>e.key==="Enter"&&extractAddUrl()}
+                          placeholder="or paste product URL…"
+                          style={{flex:1,background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:6,padding:"5px 9px",color:"#fff",fontSize:11,outline:"none"}}/>
+                        <button onClick={extractAddUrl} disabled={!addPanel.url}
+                          style={{background:"rgba(155,124,232,0.15)",border:"1px solid rgba(155,124,232,0.4)",borderRadius:6,color:"#9B7CE8",fontSize:11,fontWeight:700,padding:"5px 10px",cursor:addPanel.url?"pointer":"not-allowed",opacity:addPanel.url?1:0.4}}>Go</button>
+                      </div>
+                    </div>
+                  )}
+                  {addPanel.loading&&<div style={{fontSize:11,color:"#9B7CE8",padding:"6px 0"}}>⏳ Reading label…</div>}
+                  {addPanel.error&&<div style={{fontSize:10.5,color:"#ff9090",marginTop:4}}>⚠️ {addPanel.error}</div>}
+                  {addPanel.fields&&(
+                    <div>
+                      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:6}}>
+                        {[
+                          {f:"name",    l:"Name",       w:"1 1 120px", type:"text",  c:"#fff"  },
+                          {f:"pct",     l:"Subtype",    w:"0 1 80px",  type:"text",  c:"#777"  },
+                          {f:"kcal",    l:"kcal/100g",  w:"0 0 72px",  type:"num",   c:"#f8cdda"},
+                          {f:"fat",     l:"Fat/100g",   w:"0 0 65px",  type:"num",   c:"#ffd6a5"},
+                          {f:"carbs",   l:"Carbs/100g", w:"0 0 72px",  type:"num",   c:"#caffbf"},
+                          {f:"sugar",   l:"Sugar/100g", w:"0 0 72px",  type:"num",   c:"#a8d8a8"},
+                          {f:"protein", l:"Protein/100g",w:"0 0 80px", type:"num",   c:"#a0c4ff"},
+                          {f:"eurKg",   l:"€/kg",       w:"0 0 60px",  type:"num",   c:"#7CE8A0"},
+                        ].map(({f,l,w,type,c})=>(
+                          <div key={f} style={{flex:w,minWidth:0}}>
+                            <div style={{fontSize:8.5,color:c,marginBottom:2,letterSpacing:0.3}}>{l}</div>
+                            {type==="text"
+                              ?<input value={addPanel.fields[f]} onChange={e=>updAddField(f,e.target.value)}
+                                  style={{width:"100%",boxSizing:"border-box",background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:5,padding:"4px 6px",color:c,fontSize:11,outline:"none"}}/>
+                              :<NumInput value={addPanel.fields[f]} onChange={v=>updAddField(f,v)}
+                                  style={{width:"100%",boxSizing:"border-box",background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:5,padding:"4px 6px",color:c,fontSize:11,outline:"none",textAlign:"center"}}/>
+                            }
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{display:"flex",gap:6}}>
+                        <button onClick={()=>setAddPanel(p=>({...p,fields:null,url:""}))}
+                          style={{background:"none",border:"1px solid rgba(255,255,255,0.12)",borderRadius:6,color:"#666",fontSize:10,padding:"5px 12px",cursor:"pointer"}}>← Back</button>
+                        <button onClick={confirmAdd} disabled={!addPanel.fields.name}
+                          style={{flex:1,background:"rgba(155,124,232,0.2)",border:"1px solid rgba(155,124,232,0.45)",borderRadius:6,color:"#9B7CE8",fontSize:11,fontWeight:700,padding:"6px",cursor:addPanel.fields.name?"pointer":"not-allowed",opacity:addPanel.fields.name?1:0.5}}>
+                          ✓ Add to {cat.split(" ").slice(1).join(" ")}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {!addPanel.loading&&<button onClick={closeAddPanel} style={{background:"none",border:"none",color:"#555",cursor:"pointer",fontSize:10,marginTop:6,padding:0}}>Cancel</button>}
+                </div>
+              )}
+              <div style={{display:"flex",gap:6,marginTop:2}}>
+                <button onClick={()=>add(cat)} style={{background:`rgba(${rgb(color)},0.08)`,border:`1px dashed rgba(${rgb(color)},0.4)`,borderRadius:6,padding:"4px 12px",color,fontSize:11,cursor:"pointer"}}>+ Add ingredient</button>
+                <button onClick={()=>addPanel?.cat===cat?closeAddPanel():openAddPanel(cat)}
+                  style={{background:"rgba(155,124,232,0.08)",border:"1px dashed rgba(155,124,232,0.35)",borderRadius:6,padding:"4px 10px",color:"#9B7CE8",fontSize:11,cursor:"pointer"}}>📷 Add from label</button>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── UrlImporter ────────────────────────────────────────────────────────────
+function UrlImporter({ defs, onSaveWishlist }) {
+  const [url,setUrl]         = useState("");
+  const [loading,setLoading] = useState(false);
+  const [error,setError]     = useState("");
+  const [mapping,setMapping] = useState(null); // {extracted, recipeName, source}
+  const fileRef = useRef();
+
+  const parseAndShowMapping = (parsed, src) => {
+    const extracted = (parsed.ingredients||[]).map(e=>({name:e.name,qty:Math.round(parseFloat(e.qty)||0)}));
+    setMapping({ extracted, recipeName: parsed.recipeName||"Imported Recipe", source: src });
+  };
+
+  // ── Import from URL (text/web page)
+  const importUrl = async () => {
+    if(!url.trim())return;
+    setLoading(true);setError("");
+    try{
+      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:900,
+          tools:[{type:"web_search_20250305",name:"web_search"}],
+          messages:[{role:"user",content:
+            `Please look up this URL and extract all recipe ingredients with quantities: ${url}\n\nReturn ONLY valid JSON, no markdown fences:\n{"recipeName":"<name>","ingredients":[{"name":"<ingredient>","qty":<grams as number>,"unit":"g"}]}`
+          }]})});
+      const data=await res.json();
+      const txt=data.content.filter(b=>b.type==="text").map(b=>b.text).join("");
+      const m=txt.match(/\{[\s\S]*\}/);
+      if(!m) throw new Error("No structured data found. This page may require login (e.g. private Facebook content).");
+      parseAndShowMapping(JSON.parse(m[0]), url);
+    }catch(e){ setError(e.message); }
+    setLoading(false);
+  };
+
+  // ── Import from screenshot / image
+  const importImage = async (file) => {
+    if(!file) return;
+    setLoading(true);setError("");
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const b64 = ev.target.result.split(",")[1];
+      const mime = file.type || "image/jpeg";
+      try{
+        const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:900,
+            messages:[{role:"user",content:[
+              {type:"image",source:{type:"base64",media_type:mime,data:b64}},
+              {type:"text",text:'Extract all recipe ingredients and quantities from this image.\nReturn ONLY valid JSON, no markdown fences:\n{"recipeName":"<name>","ingredients":[{"name":"<ingredient>","qty":<grams as number>,"unit":"g"}]}'},
+            ]}]})});
+        const data=await res.json();
+        const txt=data.content.filter(b=>b.type==="text").map(b=>b.text).join("");
+        const m=txt.match(/\{[\s\S]*\}/);
+        if(!m) throw new Error("Couldn't find ingredient data in the image.");
+        parseAndShowMapping(JSON.parse(m[0]), "screenshot");
+      }catch(e){ setError(e.message); }
+      setLoading(false);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  return (
+    <div style={{maxWidth:700,margin:"0 auto"}}>
+      {mapping && (
+        <MappingDialog
+          extracted={mapping.extracted}
+          recipeName={mapping.recipeName}
+          source={mapping.source}
+          defs={defs}
+          onConfirm={result=>{onSaveWishlist(result);setMapping(null);setUrl("");}}
+          onCancel={()=>setMapping(null)}
+        />
+      )}
+
+      <div style={{background:"rgba(255,255,255,0.04)",borderRadius:12,padding:14,border:"1px solid rgba(124,185,232,0.2)",marginBottom:12}}>
+        <div style={{fontSize:12,fontWeight:700,color:"#7CB9E8",marginBottom:4}}>🔗 Import from URL</div>
+        <div style={{fontSize:10.5,color:"#555",marginBottom:10}}>
+          Paste any recipe URL — Reddit, food blogs, YouTube descriptions. Facebook <em>public</em> pages may work; private/video-only content usually can't be read.
+        </div>
+        <div style={{display:"flex",gap:6}}>
+          <input value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://…"
+            onKeyDown={e=>e.key==="Enter"&&importUrl()}
+            style={{flex:1,background:"rgba(255,255,255,0.08)",border:"1px solid rgba(124,185,232,0.3)",borderRadius:7,padding:"8px 11px",color:"#fff",fontSize:12,outline:"none",fontFamily:"Georgia,serif"}}/>
+          <button onClick={importUrl} disabled={!url.trim()||loading}
+            style={{background:"rgba(124,185,232,0.2)",border:"1px solid rgba(124,185,232,0.4)",borderRadius:7,padding:"8px 14px",color:"#7CB9E8",fontSize:11,fontWeight:700,cursor:url.trim()&&!loading?"pointer":"not-allowed",opacity:url.trim()&&!loading?1:0.5,whiteSpace:"nowrap"}}>
+            {loading?"⏳ Fetching…":"⬇ Extract"}
+          </button>
+        </div>
+      </div>
+
+      <div style={{background:"rgba(255,255,255,0.04)",borderRadius:12,padding:14,border:"1px solid rgba(155,124,232,0.2)"}}>
+        <div style={{fontSize:12,fontWeight:700,color:"#9B7CE8",marginBottom:4}}>📸 Import from Screenshot</div>
+        <div style={{fontSize:10.5,color:"#555",marginBottom:10}}>
+          Found a recipe on Instagram, TikTok, or a Facebook video? Screenshot the ingredients list and upload it here.
+        </div>
+        <input ref={fileRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>importImage(e.target.files[0])}/>
+        <button onClick={()=>fileRef.current.click()} disabled={loading}
+          style={{background:"rgba(155,124,232,0.18)",border:"1px solid rgba(155,124,232,0.4)",borderRadius:7,padding:"10px 20px",color:"#9B7CE8",fontSize:11,fontWeight:700,cursor:loading?"not-allowed":"pointer",opacity:loading?0.5:1}}>
+          {loading?"⏳ Analysing…":"📷 Upload Screenshot"}
+        </button>
+      </div>
+
+      {error&&(
+        <div style={{marginTop:10,background:"rgba(255,80,80,0.08)",border:"1px solid rgba(255,80,80,0.25)",borderRadius:8,padding:"10px 12px",fontSize:11,color:"#ff9090"}}>
+          ⚠️ {error}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── IngredientTile ────────────────────────────────────────────────────────
+function IngredientTile({ ing, inRecipe, color, onAdd }) {
+  const [hov,setHov]=useState(false);
+  const ce=(ing.costPerG||0)*ing.defaultQty;
+  return (
+    <button onClick={()=>!inRecipe&&onAdd(ing.id)} onMouseOver={()=>setHov(true)} onMouseOut={()=>setHov(false)}
+      style={{background:inRecipe?`rgba(${rgb(color)},0.2)`:hov?"rgba(255,255,255,0.10)":"rgba(255,255,255,0.05)",border:`1.5px solid ${inRecipe?color:"transparent"}`,borderRadius:8,padding:"6px 7px",cursor:inRecipe?"default":"pointer",textAlign:"left",color:"#fff",transition:"all 0.15s"}}>
+      <div style={{fontSize:10.5,fontWeight:700,lineHeight:1.3}}>
+        {ing.name}{ing.pct&&<span style={{fontSize:9,color:"#666",fontWeight:400}}> · {ing.pct}</span>}
+      </div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:3,gap:2}}>
+        <span style={{fontSize:9,color}}>{fmt(ing.defaultQty)}</span>
+        <span style={{fontSize:9,color:"#7CE8A0"}}>{fmtCost(ce)}</span>
+        <span style={{fontSize:9,color:"#777"}}>{Math.round(ing.cal*ing.defaultQty)}k</span>
+      </div>
+      {inRecipe&&<div style={{fontSize:8.5,color,marginTop:2}}>✓ added</div>}
+    </button>
+  );
+}
+
+// ── Main ──────────────────────────────────────────────────────────────────
+function NinjaCreami() {
+  const [recipe,         setRecipe]         = useState([]);
+  const [ingredientDefs, setIngredientDefs] = useState(null);
+  const [recipeName,     setRecipeName]     = useState("My Creami");
+  const [recipeSource,   setRecipeSource]   = useState("");
+  const [aiSuggestion,   setAiSuggestion]   = useState("");
+  const [aiLoading,      setAiLoading]      = useState(false);
+  const [activeCategory, setActiveCategory] = useState(Object.keys(INGREDIENTS_DEFAULT)[0]);
+  const [tab,            setTab]            = useState("build");
+  const [savedRecipes,   setSavedRecipes]   = useState([]);
+  const [storageReady,   setStorageReady]   = useState(false);
+  const [isDesktop,      setIsDesktop]      = useState(false);
+
+  useEffect(()=>{
+    const mq=window.matchMedia("(min-width:900px)");
+    setIsDesktop(mq.matches);
+    const h=e=>setIsDesktop(e.matches);
+    mq.addEventListener("change",h);return()=>mq.removeEventListener("change",h);
+  },[]);
+
+  useEffect(()=>{
+    (async()=>{
+      try{
+        const[r,d]=await Promise.all([window.storage.get("creami-recipes").catch(()=>null),window.storage.get("creami-defs").catch(()=>null)]);
+        if(r?.value)setSavedRecipes(JSON.parse(r.value));
+        setIngredientDefs(d?.value?JSON.parse(d.value):INGREDIENTS_DEFAULT);
+      }catch{setIngredientDefs(INGREDIENTS_DEFAULT);}
+      setStorageReady(true);
+    })();
+  },[]);
+
+  const getIngDef=useCallback((id)=>{
+    if(!ingredientDefs)return null;
+    for(const items of Object.values(ingredientDefs)){const f=items.find(i=>i.id===id);if(f)return f;}
+    return null;
+  },[ingredientDefs]);
+
+  const recipeItems=recipe.map(({id,qty})=>{const i=getIngDef(id);return i?{...i,qty}:null;}).filter(Boolean);
+  const totals=recipeItems.reduce((a,i)=>({
+    cal:     a.cal     + i.cal     * i.qty,
+    fat:     a.fat     + i.fat     * i.qty,
+    carbs:   a.carbs   + i.carbs   * i.qty,
+    sugar:   a.sugar   + (i.sugar||0) * i.qty,
+    protein: a.protein + i.protein * i.qty,
+    cost:    a.cost    + (i.costPerG||0) * i.qty,
+  }), {cal:0,fat:0,carbs:0,sugar:0,protein:0,cost:0});
+
+  const addIngredient    =(id)=>setRecipe(p=>p.find(r=>r.id===id)?p:[...p,{id,qty:getIngDef(id)?.defaultQty||20}]);
+  const removeIngredient =(id)=>setRecipe(p=>p.filter(r=>r.id!==id));
+  const setQtyTo         =(id,qty)=>setRecipe(p=>p.map(r=>r.id===id?{...r,qty}:r));
+  const changeQty=(id,delta)=>{
+    const ing=getIngDef(id);if(!ing)return;
+    setRecipe(p=>p.map(r=>{if(r.id!==id)return r;const q=Math.round((r.qty+delta)*10)/10;return{...r,qty:Math.max(ing.min,Math.min(ing.max,q))};}));
+  };
+
+  const persist=async(list)=>{try{await window.storage.set("creami-recipes",JSON.stringify(list));}catch{}};
+  const saveIngDefs=async(newDefs)=>{
+    setIngredientDefs(newDefs);
+    // Recompute saved recipe totals with the new ingredient definitions
+    const getD=(id)=>{for(const items of Object.values(newDefs)){const f=items.find(i=>i.id===id);if(f)return f;}return null;};
+    const updRecipes=savedRecipes.map(saved=>{
+      const t=saved.ingredients.reduce((a,si)=>{
+        const ing=getD(si.id);if(!ing)return a;
+        return{cal:a.cal+ing.cal*si.qty,fat:a.fat+ing.fat*si.qty,carbs:a.carbs+ing.carbs*si.qty,
+          sugar:a.sugar+(ing.sugar||0)*si.qty,protein:a.protein+ing.protein*si.qty,cost:a.cost+(ing.costPerG||0)*si.qty};
+      },{cal:0,fat:0,carbs:0,sugar:0,protein:0,cost:0});
+      return{...saved,totals:{cal:Math.round(t.cal),fat:Math.round(t.fat),carbs:Math.round(t.carbs),
+        sugar:Math.round(t.sugar),protein:Math.round(t.protein),cost:Math.round(t.cost*100)/100}};
+    });
+    setSavedRecipes(updRecipes);
+    try{
+      await window.storage.set("creami-defs",JSON.stringify(newDefs));
+      await window.storage.set("creami-recipes",JSON.stringify(updRecipes));
+    }catch{}
+  };
+  const resetIngDefs=async()=>{setIngredientDefs(INGREDIENTS_DEFAULT);try{await window.storage.set("creami-defs",JSON.stringify(INGREDIENTS_DEFAULT));}catch{}};
+
+  const saveRecipe=async(status)=>{
+    const s={id:Date.now().toString(),name:recipeName,status,comment:"",ratings:{},source:recipeSource,
+      ingredients:recipeItems.map(i=>({id:i.id,name:i.name,qty:i.qty,unit:i.unit})),
+      totals:{cal:Math.round(totals.cal),fat:Math.round(totals.fat),carbs:Math.round(totals.carbs),protein:Math.round(totals.protein),cost:Math.round(totals.cost*100)/100},
+      savedAt:new Date().toLocaleDateString()};
+    const u=[s,...savedRecipes];setSavedRecipes(u);await persist(u);setTab("saved");
+  };
+
+  const saveImportedWishlist=async({name,source,matched})=>{
+    const items=matched.map(m=>({...m.ing,qty:m.qty}));
+    const t=items.reduce((a,i)=>({...a,cal:a.cal+i.cal*i.qty,fat:a.fat+i.fat*i.qty,carbs:a.carbs+i.carbs*i.qty,protein:a.protein+i.protein*i.qty,cost:a.cost+(i.costPerG||0)*i.qty}),{cal:0,fat:0,carbs:0,protein:0,cost:0});
+    const s={id:Date.now().toString(),name,status:"wishlist",comment:"",ratings:{},source,
+      ingredients:items.map(i=>({id:i.id,name:i.name,qty:i.qty,unit:i.unit})),
+      totals:{cal:Math.round(t.cal),fat:Math.round(t.fat),carbs:Math.round(t.carbs),protein:Math.round(t.protein),cost:Math.round(t.cost*100)/100},
+      savedAt:new Date().toLocaleDateString()};
+    const u=[s,...savedRecipes];setSavedRecipes(u);await persist(u);setTab("saved");
+  };
+
+  const loadRecipe   =(s)=>{setRecipe(s.ingredients.map(i=>({id:i.id,qty:i.qty})));setRecipeName(s.name);setRecipeSource(s.source||"");setTab("build");};
+  const deleteRecipe =async(id)=>{const u=savedRecipes.filter(r=>r.id!==id);setSavedRecipes(u);await persist(u);};
+  const updateRecipe =async(u)=>{const a=savedRecipes.map(r=>r.id===u.id?u:r);setSavedRecipes(a);await persist(a);};
+  const byStatus     =(s)=>savedRecipes.filter(r=>r.status===s);
+
+  const getAISuggestion=useCallback(async()=>{
+    if(!recipeItems.length)return;setAiLoading(true);setAiSuggestion("");
+    const list=recipeItems.map(i=>`${fmt(i.qty)} ${i.name}`).join(", ");
+    try{
+      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:300,messages:[{role:"user",content:`Ninja Creami recipe: ${list}. Total: ${Math.round(totals.cal)} kcal, €${totals.cost.toFixed(2)}. Give: 1) Creative name, 2) One texture/taste tip, 3) One ingredient to try. Be concise and fun!`}]})});
+      const d=await res.json();setAiSuggestion(d.content?.[0]?.text||"No suggestion.");
+    }catch{setAiSuggestion("Couldn't reach AI — recipe looks great anyway!");}
+    setAiLoading(false);
+  },[recipeItems,totals]);
+
+  if(!storageReady||!ingredientDefs){
+    return(<div style={{minHeight:"100vh",background:"linear-gradient(135deg,#0F0C29,#302B63,#24243e)",display:"flex",alignItems:"center",justifyContent:"center",color:"#888",fontFamily:"Georgia,serif"}}>Loading…</div>);
+  }
+
+  const mobAccent=CAT_COLORS[activeCategory]||"#aaa";
+
+  return (
+    <div style={{minHeight:"100vh",background:"linear-gradient(135deg,#0F0C29 0%,#302B63 50%,#24243e 100%)",fontFamily:"Georgia,serif",color:"#fff",padding:"14px",boxSizing:"border-box"}}>
+      <div style={{textAlign:"center",marginBottom:12}}>
+        <h1 style={{margin:"0 0 8px",fontSize:20,fontWeight:900,background:"linear-gradient(90deg,#f8cdda,#7cb9e8,#f8cdda)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>🍦 Ninja Creami Lab</h1>
+        <div style={{display:"inline-flex",background:"rgba(255,255,255,0.07)",borderRadius:20,padding:3,gap:2}}>
+          {[["build","🔬 Build"],["saved","📖 Saved"],["import","🔗 Import"],["defaults","⚙️ Defaults"]].map(([k,l])=>(
+            <button key={k} onClick={()=>setTab(k)} style={{padding:"5px 12px",borderRadius:17,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:tab===k?"rgba(255,255,255,0.18)":"transparent",color:tab===k?"#fff":"#888"}}>
+              {l}{k==="saved"&&savedRecipes.length>0?` (${savedRecipes.length})`:""}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* BUILD */}
+      {tab==="build"&&(
+        <div style={{display:"flex",gap:12,maxWidth:isDesktop?1200:1000,margin:"0 auto",flexWrap:"wrap"}}>
+          <div style={{flex:isDesktop?"1 1 600px":"1 1 300px"}}>
+            {isDesktop?(
+              <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                {Object.entries(ingredientDefs).map(([cat,ings])=>{
+                  const color=CAT_COLORS[cat]||"#aaa";
+                  return(
+                    <div key={cat} style={{borderRadius:10,overflow:"hidden",border:`1px solid rgba(${rgb(color)},0.22)`}}>
+                      <div style={{background:`rgba(${rgb(color)},0.13)`,borderBottom:`1px solid rgba(${rgb(color)},0.18)`,padding:"6px 10px",display:"flex",alignItems:"center",gap:8}}>
+                        <div style={{fontSize:12,fontWeight:700,color}}>{cat}</div>
+                        <div style={{fontSize:9.5,color:"#555"}}>{ings.length} options</div>
+                      </div>
+                      <div style={{padding:8,background:"rgba(255,255,255,0.03)"}}>
+                        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:5}}>
+                          {ings.map(ing=><IngredientTile key={ing.id} ing={ing} inRecipe={!!recipe.find(r=>r.id===ing.id)} color={color} onAdd={addIngredient}/>)}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ):(
+              <div>
+                <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:8}}>
+                  {Object.keys(ingredientDefs).map(cat=>(
+                    <button key={cat} onClick={()=>setActiveCategory(cat)} style={{padding:"4px 8px",borderRadius:20,border:"none",cursor:"pointer",fontSize:10.5,fontWeight:700,background:activeCategory===cat?CAT_COLORS[cat]:"rgba(255,255,255,0.09)",color:"#fff"}}>{cat}</button>
+                  ))}
+                </div>
+                <div style={{background:"rgba(255,255,255,0.04)",borderRadius:12,padding:8,border:"1px solid rgba(255,255,255,0.08)"}}>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:5}}>
+                    {(ingredientDefs[activeCategory]||[]).map(ing=><IngredientTile key={ing.id} ing={ing} inRecipe={!!recipe.find(r=>r.id===ing.id)} color={mobAccent} onAdd={addIngredient}/>)}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div style={{flex:"1 1 240px",display:"flex",flexDirection:"column",gap:8}}>
+            <input value={recipeName} onChange={e=>setRecipeName(e.target.value)} style={{background:"rgba(255,255,255,0.08)",border:"1.5px solid rgba(255,255,255,0.15)",borderRadius:8,padding:"7px 11px",color:"#fff",fontSize:15,fontWeight:700,fontFamily:"Georgia,serif",outline:"none",width:"100%",boxSizing:"border-box"}}/>
+            <input value={recipeSource} onChange={e=>setRecipeSource(e.target.value)} placeholder="Source URL (optional)" style={{background:"rgba(255,255,255,0.05)",border:"1px solid rgba(124,185,232,0.2)",borderRadius:7,padding:"5px 10px",color:"#7CB9E8",fontSize:11,fontFamily:"Georgia,serif",outline:"none",width:"100%",boxSizing:"border-box"}}/>
+
+            <div style={{background:"rgba(255,255,255,0.06)",borderRadius:10,padding:"10px 12px",border:"1px solid rgba(255,255,255,0.08)"}}>
+              <div style={{fontSize:9.5,color:"#666",marginBottom:6,textTransform:"uppercase",letterSpacing:1}}>Full batch</div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:4}}>
+                {[{l:"Cal",v:Math.round(totals.cal),c:"#f8cdda"},{l:"Fat",v:`${Math.round(totals.fat)}g`,c:"#ffd6a5"},{l:"Carbs",v:`${Math.round(totals.carbs)}g`,c:"#caffbf",sugar:totals.sugar},{l:"Protein",v:`${Math.round(totals.protein)}g`,c:"#a0c4ff"}].map(n=>(
+                  <div key={n.l} style={{textAlign:"center"}}>
+                    <div style={{fontSize:17,fontWeight:900,color:n.c}}>{n.v}</div>
+                    <div style={{fontSize:9.5,color:"#666"}}>{n.l}</div>
+                    {n.sugar!=null&&n.sugar>0.5&&<div style={{fontSize:8.5,color:"#a8d8a8",marginTop:1}}>╰ {Math.round(n.sugar)}g sugar</div>}
+                  </div>
+                ))}
+              </div>
+              {recipeItems.length>0&&(
+                <div style={{marginTop:8,paddingTop:8,borderTop:"1px solid rgba(255,255,255,0.07)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <span style={{fontSize:9.5,color:"#666",textTransform:"uppercase",letterSpacing:1}}>Est. Cost</span>
+                  <span style={{fontSize:18,fontWeight:900,color:"#7CE8A0"}}>{fmtCost(totals.cost)}</span>
+                </div>
+              )}
+            </div>
+
+            <VolumeBar recipeItems={recipeItems}/>
+
+            <div style={{background:"rgba(255,255,255,0.04)",borderRadius:10,padding:8,border:"1px solid rgba(255,255,255,0.07)",flex:1}}>
+              <div style={{fontSize:9.5,color:"#666",marginBottom:6,textTransform:"uppercase",letterSpacing:1}}>Recipe</div>
+              {recipeItems.length===0?(
+                <div style={{color:"#444",fontSize:12,textAlign:"center",marginTop:20}}>{isDesktop?"👆 Click ingredients to add":"👈 Tap ingredients to add"}</div>
+              ):(
+                <div style={{display:"flex",flexDirection:"column",gap:5}}>
+                  {recipeItems.map(item=>{
+                    const cat=Object.keys(ingredientDefs).find(c=>ingredientDefs[c].find(i=>i.id===item.id));
+                    const ac=cat?(CAT_COLORS[cat]||"#aaa"):"#aaa";
+                    return(
+                      <div key={item.id} style={{background:"rgba(255,255,255,0.06)",borderRadius:7,padding:"6px 8px",borderLeft:`3px solid ${ac}`}}>
+                        <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:4}}>
+                          <div style={{flex:1,fontSize:11.5,fontWeight:700}}>{item.name}</div>
+                          <button onClick={()=>removeIngredient(item.id)} style={{background:"none",border:"none",color:"#ff7070",cursor:"pointer",fontSize:11,padding:"0 2px"}}>✕</button>
+                        </div>
+                        <div style={{display:"flex",alignItems:"center",gap:4}}>
+                          <div style={{display:"flex",alignItems:"center",gap:3,flex:1}}>
+                            <button onClick={()=>changeQty(item.id,-item.step)} style={mkBtn(ac)}>−</button>
+                            <input
+                              key={item.id + "-" + item.qty}
+                              type="text"
+                              inputMode="decimal"
+                              defaultValue={item.qty % 1 === 0 ? item.qty : item.qty}
+                              onBlur={e=>{
+                                const n=parseFloat(e.target.value.replace(",","."));
+                                if(!isNaN(n)&&n>0) setQtyTo(item.id, Math.max(item.min, Math.round(n*10)/10));
+                              }}
+                              onKeyDown={e=>e.key==="Enter"&&e.target.blur()}
+                              style={{width:46,textAlign:"center",background:"rgba(255,255,255,0.09)",border:`1px solid rgba(${rgb(ac)},0.35)`,borderRadius:5,padding:"2px 4px",color:ac,fontSize:12,fontWeight:900,outline:"none",fontFamily:"Georgia,serif"}}
+                            />
+                            <span style={{fontSize:10,color:ac,marginLeft:-2}}>g</span>
+                            <button onClick={()=>changeQty(item.id,item.step)} style={mkBtn(ac)}>+</button>
+                            {item.qty!==item.defaultQty&&<button onClick={()=>setQtyTo(item.id,item.defaultQty)} style={{background:"none",border:`1px solid rgba(${rgb(ac)},0.3)`,borderRadius:4,color:ac,cursor:"pointer",fontSize:9,padding:"2px 5px"}}>↺</button>}
+                          </div>
+                          <span style={{fontSize:10.5,color:"#7CE8A0",width:44,textAlign:"center",flexShrink:0}}>{fmtCost((item.costPerG||0)*item.qty)}</span>
+                          <span style={{fontSize:10.5,color:"#888",width:46,textAlign:"right",flexShrink:0}}>{Math.round(item.cal*item.qty)} kcal</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {recipeItems.length>0&&(
+              <div style={{display:"flex",gap:4}}>
+                {Object.entries(STATUS_CONFIG).map(([k,c])=>(
+                  <button key={k} onClick={()=>saveRecipe(k)} style={{flex:1,background:`rgba(${rgb(c.color)},0.15)`,border:`1px solid rgba(${rgb(c.color)},0.35)`,borderRadius:8,padding:"7px 4px",color:c.color,fontSize:10.5,fontWeight:700,cursor:"pointer"}}>{c.emoji} {c.label}</button>
+                ))}
+              </div>
+            )}
+
+            <button onClick={getAISuggestion} disabled={!recipeItems.length||aiLoading}
+              style={{background:aiLoading?"rgba(255,255,255,0.07)":"linear-gradient(135deg,#667eea,#764ba2)",border:"none",borderRadius:9,padding:"9px",color:"#fff",fontSize:12,fontWeight:700,cursor:!recipeItems.length?"default":"pointer",opacity:!recipeItems.length?0.35:1}}>
+              {aiLoading?"✨ Thinking…":"✨ Get AI Suggestions"}
+            </button>
+
+            {aiSuggestion&&(
+              <div style={{background:"rgba(102,126,234,0.13)",border:"1px solid rgba(102,126,234,0.3)",borderRadius:9,padding:10,fontSize:11.5,lineHeight:1.6,color:"#ddd"}}>
+                <div style={{fontSize:9.5,color:"#9b8adf",marginBottom:4,fontWeight:700}}>🤖 AI CHEF</div>
+                {aiSuggestion}
+              </div>
+            )}
+
+            {recipeItems.length>0&&<button onClick={()=>{setRecipe([]);setAiSuggestion("");}} style={{background:"transparent",border:"1px solid rgba(255,80,80,0.2)",borderRadius:7,padding:"6px",color:"#ff9090",fontSize:10.5,cursor:"pointer"}}>Clear recipe</button>}
+          </div>
+        </div>
+      )}
+
+      {tab==="saved"&&(
+        <div style={{maxWidth:700,margin:"0 auto"}}>
+          {savedRecipes.length===0?(
+            <div style={{textAlign:"center",color:"#444",fontSize:14,marginTop:40}}>No saved recipes yet.<br/><span style={{fontSize:12,color:"#555"}}>Build a recipe and save it as Wishlist, Tried, or Favorite.</span></div>
+          ):(
+            Object.entries(STATUS_CONFIG).map(([k,c])=>{
+              const g=byStatus(k);if(!g.length)return null;
+              return(
+                <div key={k} style={{marginBottom:18}}>
+                  <div style={{fontSize:13,fontWeight:700,color:c.color,marginBottom:8}}>{c.emoji} {c.label} <span style={{fontSize:10,color:"#555"}}>({g.length})</span></div>
+                  <div style={{display:"flex",flexDirection:"column",gap:7}}>
+                    {g.map(s=><RecipeCard key={s.id} saved={s} onLoad={loadRecipe} onDelete={deleteRecipe} onUpdate={updateRecipe}/>)}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+
+      {tab==="import"&&<UrlImporter defs={ingredientDefs} onSaveWishlist={saveImportedWishlist}/>}
+      {tab==="defaults"&&<DefaultsEditor defs={ingredientDefs} onSave={saveIngDefs} onReset={resetIngDefs}/>}
+    </div>
+  );
+}
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<NinjaCreami />);
+  </script>
+</body>
+</html>
