@@ -17,7 +17,6 @@
   <div id="root"></div>
   <script type="text/babel">
     const { useState, useCallback, useEffect, useRef } = React;
-
     const _SYNC_KEY='creami-sync-config',_USER_KEY='creami-user-key';
     function _getUserKey(){let k=localStorage.getItem(_USER_KEY);if(!k){k='xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0;return(c==='x'?r:(r&0x3|0x8)).toString(16)});localStorage.setItem(_USER_KEY,k);}return k;}
     function _getSyncCfg(){try{return JSON.parse(localStorage.getItem(_SYNC_KEY)||'null');}catch{return null;}}
@@ -28,7 +27,6 @@
       set:async(key,value)=>{localStorage.setItem(key,value);const cfg=_getSyncCfg();if(cfg?.url&&cfg?.key){try{await _sbUpsert(cfg,key,value);}catch{}}return{key,value};},
       delete:async(key)=>{localStorage.removeItem(key);return{key,deleted:true};},
     };
-
 
 const CONTAINER_MAX_ML = 470;
 
@@ -331,10 +329,18 @@ function RecipeCard({ saved, onLoad, onDelete, onUpdate }) {
   const [comment,setComment]=useState(saved.comment||"");
   const [editSource,setEditSource]=useState(false);
   const [source,setSource]=useState(saved.source||"");
+  const [editDate,setEditDate]=useState(false);
+  const [dateVal,setDateVal]=useState(()=>{
+    // Normalise to YYYY-MM-DD for date input; fall back to today
+    const s=saved.savedAt||"";
+    if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    return new Date().toISOString().split("T")[0];
+  });
   const sc=STATUS_CONFIG[saved.status];
   const ratings=saved.ratings||{};
   const cycleStatus=()=>{ const o=["wishlist","tried","favorite"]; onUpdate({...saved,status:o[(o.indexOf(saved.status)+1)%o.length]}); };
   const setRating=(k,v)=>onUpdate({...saved,ratings:{...ratings,[k]:v}});
+  const fmtDate=(iso)=>{ if(!iso)return""; try{ const[y,m,d]=iso.split("-"); return`${d}.${m}.${y}`; }catch{return iso;} };
   return (
     <div style={{background:"rgba(255,255,255,0.05)",borderRadius:8,border:`1px solid rgba(${rgb(sc.color)},0.3)`,padding:"8px 10px"}}>
       <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:4}}>
@@ -346,22 +352,35 @@ function RecipeCard({ saved, onLoad, onDelete, onUpdate }) {
         <button onClick={()=>onDelete(saved.id)} style={{background:"none",border:"none",color:"#ff7070",cursor:"pointer",fontSize:11}}>✕</button>
       </div>
       <div style={{fontSize:9.5,color:"#555",marginBottom:5}}>{saved.ingredients.map(i=>i.name).join(", ")}</div>
-      {/* Source */}
-      <div style={{marginBottom:5}}>
+      {/* Date + Source on same line */}
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:5,flexWrap:"wrap"}}>
+        {/* Date */}
+        <div style={{display:"flex",alignItems:"center",gap:3,flexShrink:0}}>
+          <span style={{fontSize:9.5,color:"#555"}}>📅</span>
+          {editDate?(
+            <input type="date" value={dateVal} onChange={e=>setDateVal(e.target.value)}
+              onBlur={()=>{onUpdate({...saved,savedAt:dateVal});setEditDate(false);}}
+              autoFocus
+              style={{background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:4,padding:"2px 5px",color:"#aaa",fontSize:10,outline:"none"}}/>
+          ):(
+            <span onClick={()=>setEditDate(true)} style={{fontSize:10,color:"#666",cursor:"pointer"}} title="Click to edit date">{fmtDate(dateVal)||"set date"}</span>
+          )}
+        </div>
+        {/* Source */}
         {editSource?(
-          <div style={{display:"flex",gap:4}}>
+          <div style={{display:"flex",gap:4,flex:1}}>
             <input value={source} onChange={e=>setSource(e.target.value)} placeholder="Paste recipe URL…"
               style={{flex:1,background:"rgba(255,255,255,0.08)",border:"1px solid rgba(124,185,232,0.3)",borderRadius:5,padding:"3px 7px",color:"#7CB9E8",fontSize:11,outline:"none"}}/>
             <button onClick={()=>{onUpdate({...saved,source});setEditSource(false);}} style={{background:"rgba(124,232,160,0.15)",border:"1px solid rgba(124,232,160,0.3)",borderRadius:5,color:"#7CE8A0",cursor:"pointer",fontSize:10,padding:"3px 7px"}}>Save</button>
           </div>
         ):(
-          <div style={{display:"flex",alignItems:"center",gap:5}}>
+          <div style={{display:"flex",alignItems:"center",gap:4,flex:1,minWidth:0}}>
             <span style={{fontSize:9.5,color:"#555"}}>🔗</span>
             {saved.source
-              ?<a href={saved.source} target="_blank" rel="noopener noreferrer" style={{fontSize:10,color:"#7CB9E8",textDecoration:"none",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,maxWidth:280}} title={saved.source}>{saved.source.replace(/^https?:\/\/(www\.)?/,"").split("/")[0]}</a>
-              :<span onClick={()=>setEditSource(true)} style={{fontSize:10,color:"#444",cursor:"pointer",fontStyle:"italic"}}>+ add source link</span>
+              ?<a href={saved.source} target="_blank" rel="noopener noreferrer" style={{fontSize:10,color:"#7CB9E8",textDecoration:"none",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}} title={saved.source}>{saved.source.replace(/^https?:\/\/(www\.)?/,"").split("/")[0]}</a>
+              :<span onClick={()=>setEditSource(true)} style={{fontSize:10,color:"#444",cursor:"pointer",fontStyle:"italic"}}>+ add source</span>
             }
-            {saved.source&&<button onClick={()=>setEditSource(true)} style={{background:"none",border:"none",color:"#555",cursor:"pointer",fontSize:10,padding:0}}>✏️</button>}
+            {saved.source&&<button onClick={()=>setEditSource(true)} style={{background:"none",border:"none",color:"#555",cursor:"pointer",fontSize:10,padding:0,flexShrink:0}}>✏️</button>}
           </div>
         )}
       </div>
@@ -711,6 +730,7 @@ function DefaultsEditor({ defs, onSave, onReset }) {
             <div style={{background:`rgba(${rgb(color)},0.13)`,padding:"7px 12px",borderBottom:`1px solid rgba(${rgb(color)},0.18)`,borderRadius:"10px 10px 0 0",display:"flex",alignItems:"center"}}>
               <div style={{fontSize:12,fontWeight:700,color,flex:"1 1 120px"}}>{cat} <span style={{fontSize:10,color:"#555",fontWeight:400}}>({ings.length})</span></div>
               <div style={{flex:"0 1 80px",fontSize:9,color:"#777",fontWeight:600,textAlign:"center",letterSpacing:0.5}}>SUBTYPE</div>
+              <div style={{flex:"0 0 65px",fontSize:9,color:"#E8A87C",fontWeight:600,textAlign:"center",letterSpacing:0.5}}>DEFAULT G</div>
               <div style={{flex:"0 0 90px",fontSize:9,color:"#f8cdda",fontWeight:600,textAlign:"center",letterSpacing:0.5}}>KCAL/100G</div>
               <div style={{flex:"0 0 120px",fontSize:9,color:"#7CE8A0",fontWeight:600,textAlign:"center",letterSpacing:0.5}}>€/KG  (click!)</div>
               <div style={{width:28}}/>
@@ -750,6 +770,11 @@ function DefaultsEditor({ defs, onSave, onReset }) {
                         placeholder="1.5%…"
                         style={fInp(ing.pct,pctOvr,{fontSize:10,padding:"4px 5px",color:pctOvr?"#E8C87C":"#666",fontStyle:ing.pct?"normal":"italic"})}/>
                       {pctOvr&&<button onClick={()=>revert(cat,idx,"pct")} title="Revert" style={{background:"none",border:"none",color:"#E8C87C",cursor:"pointer",fontSize:10,padding:0,flexShrink:0}}>↺</button>}
+                    </div>
+                    {/* Default qty */}
+                    <div style={{flex:"0 0 65px"}}>
+                      <NumInput value={ing.defaultQty||0} onChange={v=>upd(cat,idx,"defaultQty",v)}
+                        style={fInp(ing.defaultQty,false,{color:"#E8A87C",textAlign:"center"})}/>
                     </div>
                     {/* kcal/100g */}
                     <div style={{flex:"0 0 80px",display:"flex",gap:3,alignItems:"center"}}>
@@ -1013,6 +1038,22 @@ function IngredientTile({ ing, inRecipe, color, onAdd }) {
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────
+// Migrate loaded defs to fill in fields added after initial save
+function migrateDefs(loaded) {
+  const out = {};
+  Object.keys(loaded).forEach(cat => {
+    out[cat] = loaded[cat].map(ing => {
+      const def = DEFAULT_LOOKUP[ing.id];
+      return {
+        ...ing,
+        sugar:      ing.sugar      !== undefined ? ing.sugar      : (def?.sugar||0),
+        defaultQty: ing.defaultQty !== undefined ? ing.defaultQty : (def?.defaultQty||20),
+      };
+    });
+  });
+  return out;
+}
+
 function NinjaCreami() {
   const [recipe,         setRecipe]         = useState([]);
   const [ingredientDefs, setIngredientDefs] = useState(null);
@@ -1043,7 +1084,7 @@ function NinjaCreami() {
           window.storage.get("creami-defs").catch(()=>null),
         ]);
         if(r?.value)setSavedRecipes(JSON.parse(r.value));
-        if(d?.value)setIngredientDefs(JSON.parse(d.value));
+        if(d?.value)setIngredientDefs(migrateDefs(JSON.parse(d.value)));
       }catch{}
     };
     document.addEventListener('visibilitychange',handler);
@@ -1055,7 +1096,23 @@ function NinjaCreami() {
       try{
         const[r,d]=await Promise.all([window.storage.get("creami-recipes").catch(()=>null),window.storage.get("creami-defs").catch(()=>null)]);
         if(r?.value)setSavedRecipes(JSON.parse(r.value));
-        setIngredientDefs(d?.value?JSON.parse(d.value):INGREDIENTS_DEFAULT);
+        if(d?.value){
+          const loaded=JSON.parse(d.value);
+          // Migrate: fill in any fields added after initial save (e.g. sugar)
+          Object.keys(loaded).forEach(cat=>{
+            loaded[cat]=loaded[cat].map(ing=>{
+              const def=DEFAULT_LOOKUP[ing.id];
+              return{
+                ...ing,
+                sugar: ing.sugar!==undefined ? ing.sugar : (def?.sugar||0),
+                defaultQty: ing.defaultQty!==undefined ? ing.defaultQty : (def?.defaultQty||20),
+              };
+            });
+          });
+          setIngredientDefs(migrateDefs(loaded));
+        } else {
+          setIngredientDefs(INGREDIENTS_DEFAULT);
+        }
       }catch{setIngredientDefs(INGREDIENTS_DEFAULT);}
       setStorageReady(true);
     })();
@@ -1111,7 +1168,7 @@ function NinjaCreami() {
     const s={id:Date.now().toString(),name:recipeName,status,comment:"",ratings:{},source:recipeSource,
       ingredients:recipeItems.map(i=>({id:i.id,name:i.name,qty:i.qty,unit:i.unit})),
       totals:{cal:Math.round(totals.cal),fat:Math.round(totals.fat),carbs:Math.round(totals.carbs),protein:Math.round(totals.protein),cost:Math.round(totals.cost*100)/100},
-      savedAt:new Date().toLocaleDateString()};
+      savedAt:new Date().toISOString().split("T")[0]};
     const u=[s,...savedRecipes];setSavedRecipes(u);await persist(u);setTab("saved");
   };
 
@@ -1121,7 +1178,7 @@ function NinjaCreami() {
     const s={id:Date.now().toString(),name,status:"wishlist",comment:"",ratings:{},source,
       ingredients:items.map(i=>({id:i.id,name:i.name,qty:i.qty,unit:i.unit})),
       totals:{cal:Math.round(t.cal),fat:Math.round(t.fat),carbs:Math.round(t.carbs),protein:Math.round(t.protein),cost:Math.round(t.cost*100)/100},
-      savedAt:new Date().toLocaleDateString()};
+      savedAt:new Date().toISOString().split("T")[0]};
     const u=[s,...savedRecipes];setSavedRecipes(u);await persist(u);setTab("saved");
   };
 
@@ -1250,7 +1307,11 @@ function NinjaCreami() {
                   <div key={n.l} style={{textAlign:"center"}}>
                     <div style={{fontSize:17,fontWeight:900,color:n.c}}>{n.v}</div>
                     <div style={{fontSize:9.5,color:"#666"}}>{n.l}</div>
-                    {n.sugar!=null&&n.sugar>0.5&&<div style={{fontSize:8.5,color:"#a8d8a8",marginTop:1}}>╰ {Math.round(n.sugar)}g sugar</div>}
+                    {n.sugar!=null&&n.sugar>0.5&&(
+                      <div style={{display:"inline-flex",alignItems:"center",gap:2,background:"rgba(168,216,168,0.1)",border:"1px solid rgba(168,216,168,0.25)",borderRadius:8,padding:"1px 5px",marginTop:3}}>
+                        <span style={{fontSize:7.5,color:"#a8d8a8",whiteSpace:"nowrap"}}>╰ {Math.round(n.sugar)}g sugar</span>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -1400,18 +1461,17 @@ function NinjaCreami() {
       {tab==="import"&&<UrlImporter defs={ingredientDefs} onSaveWishlist={saveImportedWishlist}/>}
       {tab==="defaults"&&(
         <div style={{maxWidth:960,margin:"0 auto"}}>
+          <DefaultsEditor defs={ingredientDefs} onSave={saveIngDefs} onReset={resetIngDefs}/>
           <SyncPanel onActivated={async()=>{
             const[r,d]=await Promise.all([window.storage.get("creami-recipes").catch(()=>null),window.storage.get("creami-defs").catch(()=>null)]);
             if(r?.value)setSavedRecipes(JSON.parse(r.value));
-            if(d?.value)setIngredientDefs(JSON.parse(d.value));
+            if(d?.value)setIngredientDefs(migrateDefs(JSON.parse(d.value)));
           }}/>
-          <DefaultsEditor defs={ingredientDefs} onSave={saveIngDefs} onReset={resetIngDefs}/>
         </div>
       )}
     </div>
   );
 }
-
 
     ReactDOM.createRoot(document.getElementById('root')).render(<NinjaCreami />);
   </script>
