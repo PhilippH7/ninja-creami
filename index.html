@@ -1,63 +1,56 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>🍦 Ninja Creami Lab</title>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #0F0C29; }
+    select option { background: #1a1730; color: #fff; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useCallback, useEffect, useRef } = React;
 
-// ── Cloud storage layer ────────────────────────────────────────────────────
-// Uses Supabase when configured, falls back to localStorage automatically.
-// Claude artifact: window.storage already exists (handled by Claude).
-// GitHub Pages: window.storage is set below; Supabase kicks in when URL+key saved.
-
-const _SYNC_KEY  = 'creami-sync-config';
-const _USER_KEY  = 'creami-user-key';
-
-function _getUserKey() {
-  let k = localStorage.getItem(_USER_KEY);
-  if (!k) {
-    k = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-      const r = Math.random()*16|0; return (c==='x'?r:(r&0x3|0x8)).toString(16);
-    });
-    localStorage.setItem(_USER_KEY, k);
-  }
-  return k;
-}
-function _getSyncCfg() {
-  try { return JSON.parse(localStorage.getItem(_SYNC_KEY)||'null'); } catch { return null; }
-}
-async function _sbFetch(cfg, type) {
-  const uk = _getUserKey();
-  const res = await fetch(`${cfg.url}/rest/v1/creami_data?user_key=eq.${encodeURIComponent(uk)}&type=eq.${encodeURIComponent(type)}&select=data`,
-    { headers:{ apikey:cfg.key, Authorization:`Bearer ${cfg.key}` } });
-  if (!res.ok) throw new Error(`Supabase ${res.status}`);
-  const rows = await res.json();
-  return rows.length ? JSON.stringify(rows[0].data) : null;
-}
-async function _sbUpsert(cfg, type, value) {
-  const uk = _getUserKey();
-  const res = await fetch(`${cfg.url}/rest/v1/creami_data`, {
-    method:'POST',
-    headers:{ apikey:cfg.key, Authorization:`Bearer ${cfg.key}`, 'Content-Type':'application/json', Prefer:'resolution=merge-duplicates' },
-    body: JSON.stringify({ user_key:uk, type, data:JSON.parse(value), updated_at:new Date().toISOString() }),
-  });
-  if (!res.ok) throw new Error(`Supabase write ${res.status}`);
-}
-
-if (!window.storage) {
-  window.storage = {
-    get: async (key) => {
-      const cfg = _getSyncCfg();
-      if (cfg?.url && cfg?.key) {
-        try { const v=await _sbFetch(cfg,key); if(v){localStorage.setItem(key,v);return{key,value:v};} } catch {}
-      }
-      const v = localStorage.getItem(key);
-      return v ? {key,value:v} : null;
-    },
-    set: async (key, value) => {
-      localStorage.setItem(key, value);
-      const cfg = _getSyncCfg();
-      if (cfg?.url && cfg?.key) { try { await _sbUpsert(cfg,key,value); } catch {} }
-      return {key,value};
-    },
-    delete: async (key) => { localStorage.removeItem(key); return {key,deleted:true}; },
-  };
-}
+    const _SYNC_KEY  = 'creami-sync-config';
+    const _USER_KEY  = 'creami-user-key';
+    function _getUserKey() {
+      let k = localStorage.getItem(_USER_KEY);
+      if (!k) { k = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r=Math.random()*16|0; return (c==='x'?r:(r&0x3|0x8)).toString(16); }); localStorage.setItem(_USER_KEY, k); }
+      return k;
+    }
+    function _getSyncCfg() { try { return JSON.parse(localStorage.getItem(_SYNC_KEY)||'null'); } catch { return null; } }
+    async function _sbFetch(cfg, type) {
+      const uk=_getUserKey();
+      const res=await fetch(`${cfg.url}/rest/v1/creami_data?user_key=eq.${encodeURIComponent(uk)}&type=eq.${encodeURIComponent(type)}&select=data`,{headers:{apikey:cfg.key,Authorization:`Bearer ${cfg.key}`}});
+      if(!res.ok) throw new Error(`Supabase ${res.status}`);
+      const rows=await res.json(); return rows.length?JSON.stringify(rows[0].data):null;
+    }
+    async function _sbUpsert(cfg, type, value) {
+      const uk=_getUserKey();
+      const res=await fetch(`${cfg.url}/rest/v1/creami_data`,{method:'POST',headers:{apikey:cfg.key,Authorization:`Bearer ${cfg.key}`,'Content-Type':'application/json',Prefer:'resolution=merge-duplicates'},body:JSON.stringify({user_key:uk,type,data:JSON.parse(value),updated_at:new Date().toISOString()})});
+      if(!res.ok) throw new Error(`Supabase write ${res.status}`);
+    }
+    window.storage = {
+      get: async (key) => {
+        const cfg=_getSyncCfg();
+        if(cfg?.url&&cfg?.key){try{const v=await _sbFetch(cfg,key);if(v){localStorage.setItem(key,v);return{key,value:v};}}catch{}}
+        const v=localStorage.getItem(key); return v?{key,value:v}:null;
+      },
+      set: async (key,value) => {
+        localStorage.setItem(key,value);
+        const cfg=_getSyncCfg();
+        if(cfg?.url&&cfg?.key){try{await _sbUpsert(cfg,key,value);}catch{}}
+        return {key,value};
+      },
+      delete: async (key) => { localStorage.removeItem(key); return {key,deleted:true}; },
+    };
 
 
 const CONTAINER_MAX_ML = 470;
@@ -1029,7 +1022,7 @@ function IngredientTile({ ing, inRecipe, color, onAdd }) {
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────
-export default function NinjaCreami() {
+function NinjaCreami() {
   const [recipe,         setRecipe]         = useState([]);
   const [ingredientDefs, setIngredientDefs] = useState(null);
   const [recipeName,     setRecipeName]     = useState("My Creami");
@@ -1423,3 +1416,9 @@ export default function NinjaCreami() {
     </div>
   );
 }
+
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<NinjaCreami />);
+  </script>
+</body>
+</html>
