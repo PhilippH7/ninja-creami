@@ -431,11 +431,15 @@ function SyncPanel({ onActivated }) {
   const [saved,setSaved]=useState(!!_getSyncCfg()?.url);
   const [testing,setTesting]=useState(false);
   const [syncing,setSyncing]=useState(false);
-  const [testResult,setTestResult]=useState(null); // 'ok'|'error'
-  const userKey=_getUserKey();
+  const [testResult,setTestResult]=useState(null);
+  const [userKeyInput,setUserKeyInput]=useState(_getUserKey);
 
   const save=async()=>{
     if(cfg.url&&cfg.key){
+      // If user pasted a different key, save it
+      if(userKeyInput && userKeyInput!==localStorage.getItem(_USER_KEY)){
+        localStorage.setItem(_USER_KEY, userKeyInput);
+      }
       localStorage.setItem(_SYNC_KEY,JSON.stringify(cfg));
       setSaved(true);setTestResult(null);
       setSyncing(true);
@@ -466,12 +470,14 @@ function SyncPanel({ onActivated }) {
 
       {/* User key */}
       <div style={{marginBottom:10}}>
-        <div style={{fontSize:9.5,color:'#555',marginBottom:3,textTransform:'uppercase',letterSpacing:0.5}}>Your sync key <span style={{color:'#444'}}>(keep this private)</span></div>
+        <div style={{fontSize:9.5,color:'#555',marginBottom:3,textTransform:'uppercase',letterSpacing:0.5}}>Sync key — <span style={{color:'#E8C47C'}}>must be identical on all your devices</span></div>
         <div style={{display:'flex',gap:6}}>
-          <div style={{flex:1,background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:6,padding:'5px 9px',fontSize:10,color:'#888',fontFamily:'monospace',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{userKey}</div>
-          <button onClick={copyKey} style={{background:'rgba(124,185,232,0.12)',border:'1px solid rgba(124,185,232,0.3)',borderRadius:6,color:'#7CB9E8',fontSize:10,padding:'4px 10px',cursor:'pointer'}}>Copy</button>
+          <input value={userKeyInput} onChange={e=>setUserKeyInput(e.target.value.trim())}
+            style={{flex:1,background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.15)',borderRadius:6,padding:'5px 9px',fontSize:10,color:'#aaa',fontFamily:'monospace',outline:'none'}}/>
+          <button onClick={()=>navigator.clipboard?.writeText(userKeyInput).then(()=>alert('Sync key copied!')).catch(()=>alert(userKeyInput))}
+            style={{background:'rgba(124,185,232,0.12)',border:'1px solid rgba(124,185,232,0.3)',borderRadius:6,color:'#7CB9E8',fontSize:10,padding:'4px 10px',cursor:'pointer',flexShrink:0}}>Copy</button>
         </div>
-        <div style={{fontSize:9.5,color:'#444',marginTop:3}}>This key identifies your data. It's auto-generated and stored in your browser.</div>
+        <div style={{fontSize:9.5,color:'#444',marginTop:3}}>On a new device: paste your key from another device here before saving.</div>
       </div>
 
       {/* Supabase config */}
