@@ -18,38 +18,15 @@
   <script type="text/babel">
     const { useState, useCallback, useEffect, useRef } = React;
 
-    const _SYNC_KEY  = 'creami-sync-config';
-    const _USER_KEY  = 'creami-user-key';
-    function _getUserKey() {
-      let k = localStorage.getItem(_USER_KEY);
-      if (!k) { k = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r=Math.random()*16|0; return (c==='x'?r:(r&0x3|0x8)).toString(16); }); localStorage.setItem(_USER_KEY, k); }
-      return k;
-    }
-    function _getSyncCfg() { try { return JSON.parse(localStorage.getItem(_SYNC_KEY)||'null'); } catch { return null; } }
-    async function _sbFetch(cfg, type) {
-      const uk=_getUserKey();
-      const res=await fetch(`${cfg.url}/rest/v1/creami_data?user_key=eq.${encodeURIComponent(uk)}&type=eq.${encodeURIComponent(type)}&select=data`,{headers:{apikey:cfg.key,Authorization:`Bearer ${cfg.key}`}});
-      if(!res.ok) throw new Error(`Supabase ${res.status}`);
-      const rows=await res.json(); return rows.length?JSON.stringify(rows[0].data):null;
-    }
-    async function _sbUpsert(cfg, type, value) {
-      const uk=_getUserKey();
-      const res=await fetch(`${cfg.url}/rest/v1/creami_data`,{method:'POST',headers:{apikey:cfg.key,Authorization:`Bearer ${cfg.key}`,'Content-Type':'application/json',Prefer:'resolution=merge-duplicates'},body:JSON.stringify({user_key:uk,type,data:JSON.parse(value),updated_at:new Date().toISOString()})});
-      if(!res.ok) throw new Error(`Supabase write ${res.status}`);
-    }
-    window.storage = {
-      get: async (key) => {
-        const cfg=_getSyncCfg();
-        if(cfg?.url&&cfg?.key){try{const v=await _sbFetch(cfg,key);if(v){localStorage.setItem(key,v);return{key,value:v};}}catch{}}
-        const v=localStorage.getItem(key); return v?{key,value:v}:null;
-      },
-      set: async (key,value) => {
-        localStorage.setItem(key,value);
-        const cfg=_getSyncCfg();
-        if(cfg?.url&&cfg?.key){try{await _sbUpsert(cfg,key,value);}catch{}}
-        return {key,value};
-      },
-      delete: async (key) => { localStorage.removeItem(key); return {key,deleted:true}; },
+    const _SYNC_KEY='creami-sync-config',_USER_KEY='creami-user-key';
+    function _getUserKey(){let k=localStorage.getItem(_USER_KEY);if(!k){k='xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0;return(c==='x'?r:(r&0x3|0x8)).toString(16)});localStorage.setItem(_USER_KEY,k);}return k;}
+    function _getSyncCfg(){try{return JSON.parse(localStorage.getItem(_SYNC_KEY)||'null');}catch{return null;}}
+    async function _sbFetch(cfg,type){const uk=_getUserKey();const res=await fetch(`${cfg.url}/rest/v1/creami_data?user_key=eq.${encodeURIComponent(uk)}&type=eq.${encodeURIComponent(type)}&select=data`,{headers:{apikey:cfg.key,Authorization:`Bearer ${cfg.key}`}});if(!res.ok)throw new Error(`Supabase ${res.status}`);const rows=await res.json();return rows.length?JSON.stringify(rows[0].data):null;}
+    async function _sbUpsert(cfg,type,value){const uk=_getUserKey();const res=await fetch(`${cfg.url}/rest/v1/creami_data`,{method:'POST',headers:{apikey:cfg.key,Authorization:`Bearer ${cfg.key}`,'Content-Type':'application/json',Prefer:'resolution=merge-duplicates'},body:JSON.stringify({user_key:uk,type,data:JSON.parse(value),updated_at:new Date().toISOString()})});if(!res.ok)throw new Error(`Supabase write ${res.status}`);}
+    window.storage={
+      get:async(key)=>{const cfg=_getSyncCfg();if(cfg?.url&&cfg?.key){try{const v=await _sbFetch(cfg,key);if(v){localStorage.setItem(key,v);return{key,value:v};}}catch{}}const v=localStorage.getItem(key);return v?{key,value:v}:null;},
+      set:async(key,value)=>{localStorage.setItem(key,value);const cfg=_getSyncCfg();if(cfg?.url&&cfg?.key){try{await _sbUpsert(cfg,key,value);}catch{}}return{key,value};},
+      delete:async(key)=>{localStorage.removeItem(key);return{key,deleted:true};},
     };
 
 
@@ -449,16 +426,24 @@ function NumInput({ value, onChange, style, placeholder }) {
 }
 
 // ── SyncPanel ─────────────────────────────────────────────────────────────
-function SyncPanel() {
+function SyncPanel({ onActivated }) {
   const [cfg,setCfg]=useState(()=>_getSyncCfg()||{url:'',key:''});
   const [saved,setSaved]=useState(!!_getSyncCfg()?.url);
   const [testing,setTesting]=useState(false);
+  const [syncing,setSyncing]=useState(false);
   const [testResult,setTestResult]=useState(null); // 'ok'|'error'
   const userKey=_getUserKey();
 
-  const save=()=>{
-    if(cfg.url&&cfg.key){localStorage.setItem(_SYNC_KEY,JSON.stringify(cfg));setSaved(true);setTestResult(null);}
-    else{localStorage.removeItem(_SYNC_KEY);setSaved(false);}
+  const save=async()=>{
+    if(cfg.url&&cfg.key){
+      localStorage.setItem(_SYNC_KEY,JSON.stringify(cfg));
+      setSaved(true);setTestResult(null);
+      setSyncing(true);
+      try{ await onActivated?.(); }catch{}
+      setSyncing(false);
+    } else {
+      localStorage.removeItem(_SYNC_KEY);setSaved(false);
+    }
   };
   const disconnect=()=>{localStorage.removeItem(_SYNC_KEY);setCfg({url:'',key:''});setSaved(false);setTestResult(null);};
   const test=async()=>{
@@ -506,9 +491,9 @@ function SyncPanel() {
           style={{background:'rgba(155,124,232,0.15)',border:'1px solid rgba(155,124,232,0.35)',borderRadius:6,color:'#9B7CE8',fontSize:11,fontWeight:700,padding:'6px 12px',cursor:cfg.url&&cfg.key?'pointer':'not-allowed',opacity:cfg.url&&cfg.key?1:0.4}}>
           {testing?'Testing…':'Test connection'}
         </button>
-        <button onClick={save} disabled={!cfg.url||!cfg.key}
+        <button onClick={save} disabled={!cfg.url||!cfg.key||syncing}
           style={{flex:1,background:cfg.url&&cfg.key?'rgba(124,232,160,0.2)':'rgba(255,255,255,0.05)',border:`1px solid rgba(124,232,160,${cfg.url&&cfg.key?0.5:0.15})`,borderRadius:6,color:cfg.url&&cfg.key?'#7CE8A0':'#555',fontSize:11,fontWeight:700,padding:'6px',cursor:cfg.url&&cfg.key?'pointer':'not-allowed'}}>
-          ✓ Save & activate
+          {syncing?'⏳ Syncing…':'✓ Save & activate'}
         </button>
         {saved&&<button onClick={disconnect} style={{background:'none',border:'1px solid rgba(255,80,80,0.25)',borderRadius:6,color:'#ff9090',fontSize:10,padding:'6px 10px',cursor:'pointer'}}>Disconnect</button>}
       </div>
@@ -1409,7 +1394,11 @@ function NinjaCreami() {
       {tab==="import"&&<UrlImporter defs={ingredientDefs} onSaveWishlist={saveImportedWishlist}/>}
       {tab==="defaults"&&(
         <div style={{maxWidth:960,margin:"0 auto"}}>
-          <SyncPanel/>
+          <SyncPanel onActivated={async()=>{
+            const[r,d]=await Promise.all([window.storage.get("creami-recipes").catch(()=>null),window.storage.get("creami-defs").catch(()=>null)]);
+            if(r?.value)setSavedRecipes(JSON.parse(r.value));
+            if(d?.value)setIngredientDefs(JSON.parse(d.value));
+          }}/>
           <DefaultsEditor defs={ingredientDefs} onSave={saveIngDefs} onReset={resetIngDefs}/>
         </div>
       )}
