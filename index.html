@@ -18,7 +18,6 @@
   <script type="text/babel">
     const { useState, useCallback, useEffect, useRef } = React;
 
-    // ── localStorage polyfill ──────────────────────────────────────────────
     window.storage = {
       get:    async (key)       => { const v=localStorage.getItem(key); return v?{key,value:v}:null; },
       set:    async (key,value) => { localStorage.setItem(key,value);   return {key,value}; },
@@ -1021,6 +1020,46 @@ function NinjaCreami() {
   const updateRecipe =async(u)=>{const a=savedRecipes.map(r=>r.id===u.id?u:r);setSavedRecipes(a);await persist(a);};
   const byStatus     =(s)=>savedRecipes.filter(r=>r.status===s);
 
+  const importFileRef=useRef();
+  const [exportModal,setExportModal]=useState(null); // JSON string when open
+  const [importModal,setImportModal]=useState(false);
+  const [importText,setImportText]=useState("");
+
+  const exportData=async()=>{
+    try{
+      const[r,d]=await Promise.all([window.storage.get("creami-recipes").catch(()=>null),window.storage.get("creami-defs").catch(()=>null)]);
+      const data={recipes:r?.value?JSON.parse(r.value):[],defs:d?.value?JSON.parse(d.value):null,exportedAt:new Date().toISOString()};
+      const json=JSON.stringify(data,null,2);
+      // Try direct file download (works on GitHub Pages)
+      try{
+        const blob=new Blob([json],{type:"application/json"});
+        const url=URL.createObjectURL(blob);
+        const a=document.createElement("a");
+        a.href=url;a.download=`ninja-creami-backup.json`;
+        document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+      }catch{
+        // Claude artifact: show copy panel instead
+        setExportModal(json);
+      }
+    }catch(e){alert("Export failed: "+e.message);}
+  };
+
+  const doImport=async(jsonStr)=>{
+    try{
+      const data=JSON.parse(jsonStr);
+      if(data.recipes){await window.storage.set("creami-recipes",JSON.stringify(data.recipes));setSavedRecipes(data.recipes);}
+      if(data.defs){await window.storage.set("creami-defs",JSON.stringify(data.defs));setIngredientDefs(data.defs);}
+      setImportModal(false);setImportText("");
+      alert(`✓ Imported ${data.recipes?.length||0} recipes!`);
+    }catch{alert("Import failed — make sure this is a valid Ninja Creami backup.");}
+  };
+  const importData=async(file)=>{
+    if(!file)return;
+    const reader=new FileReader();
+    reader.onload=e=>doImport(e.target.result);
+    reader.readAsText(file);
+  };
+
   const getAISuggestion=useCallback(async()=>{
     if(!recipeItems.length)return;setAiLoading(true);setAiSuggestion("");
     const list=recipeItems.map(i=>`${fmt(i.qty)} ${i.name}`).join(", ");
@@ -1186,6 +1225,50 @@ function NinjaCreami() {
 
       {tab==="saved"&&(
         <div style={{maxWidth:700,margin:"0 auto"}}>
+          <input ref={importFileRef} type="file" accept=".json" style={{display:"none"}} onChange={e=>importData(e.target.files[0])}/>
+
+          {/* Export modal */}
+          {exportModal&&(
+            <div style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,0.75)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+              <div style={{background:"#1a1730",borderRadius:14,border:"1px solid rgba(124,232,160,0.3)",width:"100%",maxWidth:560,padding:18,boxShadow:"0 20px 60px rgba(0,0,0,0.8)"}}>
+                <div style={{fontSize:13,fontWeight:700,marginBottom:4}}>💾 Your backup data</div>
+                <div style={{fontSize:10.5,color:"#555",marginBottom:10}}>Copy this text, then on your other device go to Saved → Import → paste it in.</div>
+                <textarea readOnly value={exportModal} rows={8}
+                  style={{width:"100%",boxSizing:"border-box",background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:7,padding:"8px 10px",color:"#7CE8A0",fontSize:10,fontFamily:"monospace",outline:"none",resize:"vertical"}}/>
+                <div style={{display:"flex",gap:8,marginTop:10}}>
+                  <button onClick={()=>{navigator.clipboard?.writeText(exportModal).then(()=>alert("Copied!")).catch(()=>alert("Select all text above and copy manually"));}}
+                    style={{flex:1,background:"rgba(124,232,160,0.2)",border:"1px solid rgba(124,232,160,0.4)",borderRadius:7,color:"#7CE8A0",fontSize:11,fontWeight:700,padding:"8px",cursor:"pointer"}}>📋 Copy to clipboard</button>
+                  <button onClick={()=>setExportModal(null)}
+                    style={{background:"none",border:"1px solid rgba(255,255,255,0.12)",borderRadius:7,color:"#666",fontSize:11,padding:"8px 16px",cursor:"pointer"}}>Close</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Import modal */}
+          {importModal&&(
+            <div style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,0.75)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+              <div style={{background:"#1a1730",borderRadius:14,border:"1px solid rgba(124,185,232,0.3)",width:"100%",maxWidth:560,padding:18,boxShadow:"0 20px 60px rgba(0,0,0,0.8)"}}>
+                <div style={{fontSize:13,fontWeight:700,marginBottom:4}}>📂 Import backup</div>
+                <div style={{fontSize:10.5,color:"#555",marginBottom:10}}>Paste your backup text below, or upload a .json file.</div>
+                <textarea value={importText} onChange={e=>setImportText(e.target.value)} rows={8} placeholder="Paste backup JSON here…"
+                  style={{width:"100%",boxSizing:"border-box",background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:7,padding:"8px 10px",color:"#7CB9E8",fontSize:10,fontFamily:"monospace",outline:"none",resize:"vertical"}}/>
+                <div style={{display:"flex",gap:8,marginTop:10}}>
+                  <button onClick={()=>{importFileRef.current.value="";importFileRef.current.click();}}
+                    style={{background:"rgba(124,185,232,0.12)",border:"1px solid rgba(124,185,232,0.3)",borderRadius:7,color:"#7CB9E8",fontSize:11,fontWeight:700,padding:"8px 12px",cursor:"pointer"}}>📁 Upload file</button>
+                  <button onClick={()=>doImport(importText)} disabled={!importText.trim()}
+                    style={{flex:1,background:importText.trim()?"rgba(124,185,232,0.2)":"rgba(255,255,255,0.05)",border:`1px solid rgba(124,185,232,${importText.trim()?0.5:0.15})`,borderRadius:7,color:importText.trim()?"#7CB9E8":"#555",fontSize:11,fontWeight:700,padding:"8px",cursor:importText.trim()?"pointer":"not-allowed"}}>✓ Import</button>
+                  <button onClick={()=>{setImportModal(false);setImportText("");}}
+                    style={{background:"none",border:"1px solid rgba(255,255,255,0.12)",borderRadius:7,color:"#666",fontSize:11,padding:"8px 16px",cursor:"pointer"}}>Cancel</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div style={{display:"flex",justifyContent:"flex-end",gap:6,marginBottom:12}}>
+            <button onClick={exportData} style={{background:"rgba(124,232,160,0.12)",border:"1px solid rgba(124,232,160,0.3)",borderRadius:7,color:"#7CE8A0",fontSize:11,fontWeight:700,padding:"6px 12px",cursor:"pointer"}}>💾 Export backup</button>
+            <button onClick={()=>setImportModal(true)} style={{background:"rgba(124,185,232,0.12)",border:"1px solid rgba(124,185,232,0.3)",borderRadius:7,color:"#7CB9E8",fontSize:11,fontWeight:700,padding:"6px 12px",cursor:"pointer"}}>📂 Import backup</button>
+          </div>
           {savedRecipes.length===0?(
             <div style={{textAlign:"center",color:"#444",fontSize:14,marginTop:40}}>No saved recipes yet.<br/><span style={{fontSize:12,color:"#555"}}>Build a recipe and save it as Wishlist, Tried, or Favorite.</span></div>
           ):(
@@ -1209,6 +1292,7 @@ function NinjaCreami() {
     </div>
   );
 }
+
 
     ReactDOM.createRoot(document.getElementById('root')).render(<NinjaCreami />);
   </script>
